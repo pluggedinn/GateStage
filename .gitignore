@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.next/
+out/
+dist/
+build/
+
+# Database
+data/
+*.db
+*.db-journal
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Electron
+release/
+dist-electron/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# Logs
+*.log
+npm-debug.log*
+
+# Drizzle
+drizzle/meta/
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts

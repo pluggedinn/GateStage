@@ -1,0 +1,367 @@
+# GateStage — Agent Handoff
+
+**Read this first.** This document captures everything decided in project planning so another agent (or developer) can implement GateStage without prior chat context.
+
+---
+
+## Product summary
+
+**GateStage** is a local server application for FPV whoop race events. It:
+
+1. Listens to race events from the **Next** race director desktop app ([go-next.co](https://go-next.co/))
+2. Maps those events to LED gate behaviors
+3. Sends commands to **ESPHome** devices (ESP32-C5 + 12V LED strips) over the race LAN
+4. Serves a **web UI** for configuration, manual control, and a live event console
+5. Supports **multiple browser clients** on the same WiFi (crew tablets, etc.)
+
+**Tagline:** LED gate control for FPV races.
+
+---
+
+## What GateStage is NOT
+
+- Not a lap timer (that's **Nuclear Hazard / RotorHazard** — RSSI only, feeds Next)
+- Not a replacement for **Next** (Next remains the race director app)
+- Not dependent on Home Assistant
+- Not a cloud service — runs locally on the race director laptop
+
+---
+
+## Race environment (must understand)
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for full detail. Short version:
+
+| Piece | Location | Role |
+|-------|----------|------|
+| Nuclear Hazard (Pi 4) | At track | 5 GHz AP (ch 36) + RotorHazard timing |
+| USB WiFi + antenna | Plugged into Pi | Internet uplink (tablet hotspot or venue WiFi) |
+| RD laptop | Race WiFi | Next app + **GateStage server** |
+| ESP32 gates | Race WiFi | LED strips |
+| Whoops | Air | VTX on Raceband R1–R8, **not on WiFi** |
+
+GateStage server must bind **`0.0.0.0`** (not only `127.0.0.1`) so crew devices on race WiFi can reach the UI.
+
+---
+
+## Architecture decision: server is the brain
+
+**Final decision (do not revert to client-only design):**
+
+| Responsibility | Owner |
+|----------------|--------|
+| WebSocket client → Next RD app | **GateStage server** (Node) |
+| Event → action mapping | **GateStage server** |
+| HTTP → ESPHome gates | **GateStage server** (avoids browser CORS) |
+| Config persistence | **GateStage server** (SQLite) |
+| Broadcast live events to UIs | **GateStage server** (Socket.io) |
+| Settings / manual / live console UI | **Browser clients** (thin) |
+
+**Why:** RD laptop is the main brain; browsers are windows. Other devices log into the same server to see settings and events. If logic lived in React client components, closing a tab would stop gate reactions and multi-device sync would break.
+
+**Rejected alternatives:**
+
+- Client components connecting directly to Next WebSocket — no multi-device, tab-dependent
+- Home Assistant in the loop — extra latency and failure point
+- MQTT for v1 — unnecessary for ~4–8 gates
+- Python/FastAPI split — user prefers all Next.js; ESPHome REST from Node is sufficient for v1
+
+---
+
+## Tech stack (implement this)
+
+| Layer | Choice |
+|-------|--------|
+| Framework | **Next.js 15+**, App Router, **TypeScript** |
+| Custom server | **`server.ts`** — Next.js + **Socket.io** on one port |
+| Next event input | **`ws`** package — WebSocket **client** to Next RD (localhost) |
+| Gate output | **HTTP REST** to ESPHome `web_server` via `fetch` |
+| Config DB | **SQLite** + **Drizzle ORM** |
+| Real-time UI | **Socket.io** (server → all browsers) |
+| Auth | Simple **shared password** → session cookie; protect routes via middleware |
+| UI | **Tailwind + shadcn/ui** |
+| Validation | **Zod** (event payloads, API bodies) |
+| Future distribution | **Electron** + `output: 'standalone'` + **electron-builder** (Mac .dmg, Windows .exe) |
+
+### Do NOT use
+
+- Vercel / serverless deployment — needs persistent local server
+- Client-side-only ESPHome calls — CORS will block browser → ESP32
+
+---
+
+## Next RD events to handle
+
+These are the events GateStage must consume (exact payload schema **TBD** — confirm with Next team or inspect locally):
+
+| Event | When | Expected use |
+|-------|------|----------------|
+| `heat.loaded` | Heat/group selected, frequencies assigned, pilots known | Idle/setup; show pilot colors on start gate; contains pilot info + colors |
+| `heat.arm_started` | RD presses Start; arming sequence begins | Countdown / chase animation on start gate |
+| `heat.go` | Start tone; race clock starts | Green flash all gates (or mapped effect) |
+| `heat.finished` | RD presses Finish or auto-finish | Red hold / fade off |
+| `pilot.crossing` | Every start/finish crossing (holeshot + laps) | Flash gate in **pilot color**; includes pilot info + color |
+
+Suggested TypeScript shape (adjust when real payloads are known):
+
+```ts
+type RaceEvent =
+  | { type: "heat.loaded"; heat: HeatInfo; pilots: Pilot[] }
+  | { type: "heat.arm_started"; heat: HeatInfo }
+  | { type: "heat.go"; heat: HeatInfo }
+  | { type: "heat.finished"; heat: HeatInfo }
+  | { type: "pilot.crossing"; pilot: Pilot; crossing: CrossingInfo };
+
+type Pilot = {
+  id: string;
+  name: string;
+  color: { r: number; g: number; b: number }; // or hex — TBD
+  seat?: number;
+};
+```
+
+---
+
+## Config model (SQLite)
+
+### Tables / entities
+
+**gates**
+
+- `id`, `name`, `host` (IP or hostname), `light_entity` (ESPHome entity name, e.g. `Gate LEDs`)
+- `is_start_gate` (boolean — only one should be true)
+- `enabled`, `sort_order`
+
+**event_mappings**
+
+- `id`, `event_type` (enum matching events above)
+- `target`: `all` | `start_gate` | `gate_id`
+- `action` (JSON), e.g.:
+  - `{ "kind": "effect", "name": "Rainbow" }`
+  - `{ "kind": "photo_color" }` — use pilot color from event
+  - `{ "kind": "solid", "r": 0, "g": 255, "b": 0 }`
+  - `{ "kind": "off" }`
+
+**settings** (optional key-value)
+
+- `next_ws_url` — default `ws://127.0.0.1:PORT/...` (TBD)
+- `auth_password_hash` or rely on env `GATESTAGE_PASSWORD`
+
+Store DB in user data dir when packaged with Electron; dev: `./data/gatestage.db`.
+
+---
+
+## Suggested repo layout
+
+```txt
+GateStage/
+├── server.ts                 # HTTP + Next handler + Socket.io + start RaceBrain
+├── instrumentation.ts        # alt: boot RaceBrain if not using custom server
+├── lib/
+│   ├── race-brain.ts         # singleton orchestrator
+│   ├── next-listener.ts      # WebSocket client → Next RD
+│   ├── gate-engine.ts        # event → actions, debounce pilot.crossing
+│   ├── esphome.ts            # fetch() wrapper for REST
+│   ├── broadcaster.ts        # Socket.io emit helpers
+│   └── db/                   # Drizzle schema + client
+├── app/
+│   ├── login/page.tsx
+│   ├── page.tsx              # live dashboard
+│   ├── gates/page.tsx
+│   ├── mappings/page.tsx
+│   ├── manual/page.tsx
+│   ├── api/
+│   │   ├── gates/route.ts
+│   │   ├── mappings/route.ts
+│   │   ├── manual/[gateId]/route.ts
+│   │   └── health/route.ts
+│   └── layout.tsx
+├── hooks/use-race-socket.ts
+├── middleware.ts             # auth
+├── docs/                     # this folder
+└── data/                     # SQLite (gitignored)
+```
+
+---
+
+## Race brain lifecycle
+
+```
+1. Server starts → RaceBrain.init()
+2. Load gates + mappings from SQLite
+3. Connect WebSocket to Next RD app
+4. On message → parse → validate (Zod) → GateEngine.dispatch()
+5. GateEngine → parallel fetch() to ESPHome gates (Promise.allSettled)
+6. Emit to Socket.io:
+   - race:event     (raw event received)
+   - race:action    (what was sent to which gate)
+   - gate:health    (optional periodic ping)
+7. On config change via API → persist → emit config:updated
+8. Reconnect Next WS on disconnect with backoff
+```
+
+### Socket.io events (server → clients)
+
+```ts
+"race:event"    // { type, payload, at }
+"race:action"   // { gateId, command, success, error? }
+"config:updated"
+"gate:health"   // { gateId, online }
+"connection:next" // { connected: boolean }
+```
+
+---
+
+## UI pages (v1)
+
+1. **Login** — shared password
+2. **Dashboard** — Next connection status, gate health, live event feed
+3. **Gates** — CRUD gates, mark start gate, test button per gate
+4. **Mappings** — per event type: target + action builder
+5. **Manual** — per-gate on/off/color/effect (race-day override)
+
+---
+
+## ESPHome integration (v1)
+
+Use `web_server` REST only. See [ESPHOME.md](./ESPHOME.md).
+
+```ts
+// lib/esphome.ts
+export async function turnOnEffect(host: string, entity: string, effect: string) {
+  const url = `http://${host}/light/${encodeURIComponent(entity)}/turn_on?effect=${encodeURIComponent(effect)}`;
+  return fetch(url, { method: "POST" });
+}
+
+export async function turnOnRgb(host: string, entity: string, r: number, g: number, b: number, brightness = 200) {
+  const q = new URLSearchParams({ color_mode: "rgb", r: String(r), g: String(g), b: String(b), brightness: String(brightness) });
+  const url = `http://${host}/light/${encodeURIComponent(entity)}/turn_on?${q}`;
+  return fetch(url, { method: "POST" });
+}
+```
+
+---
+
+## Default mapping suggestions (seed data)
+
+| Event | Target | Action |
+|-------|--------|--------|
+| `heat.loaded` | `start_gate` | Show pilot colors (sequence or first pilot — TBD) |
+| `heat.arm_started` | `start_gate` | Effect: `Pulse` or custom countdown |
+| `heat.go` | `all` | Solid green or effect `Strobe` green |
+| `heat.finished` | `all` | Solid red, then off after N seconds |
+| `pilot.crossing` | `start_gate` | `pilot_color` from event payload |
+
+---
+
+## Implementation phases
+
+### Phase 1 — Scaffold
+- [ ] Init Next.js 15 + TypeScript + Tailwind + shadcn
+- [ ] Custom `server.ts` with Socket.io
+- [ ] SQLite + Drizzle schema (gates, mappings)
+- [ ] Basic auth (password env var + middleware)
+
+### Phase 2 — Gates without Next
+- [ ] Gates CRUD API + UI
+- [ ] `lib/esphome.ts` + manual test from UI
+- [ ] Confirm ESP32 reachable from RD laptop on race WiFi
+
+### Phase 3 — Next listener
+- [ ] Discover Next WebSocket URL and payload format (**blocker**)
+- [ ] `next-listener.ts` + parse/log events
+- [ ] Live console on dashboard via Socket.io
+
+### Phase 4 — Automation
+- [ ] Mappings CRUD UI
+- [ ] `gate-engine.ts` wired to listener
+- [ ] Debounce duplicate `pilot.crossing`
+- [ ] Starting gate logic
+
+### Phase 5 — Polish
+- [ ] Gate health checks
+- [ ] Reconnect / error states in UI
+- [ ] Export/import config JSON
+- [ ] README run instructions
+
+### Phase 6 — Distribution (later)
+- [ ] `output: 'standalone'` in next.config
+- [ ] Electron wrapper + tray icon showing crew URL
+- [ ] electron-builder Mac/Windows targets
+- [ ] DB in `app.getPath('userData')`
+
+---
+
+## Open questions / blockers
+
+1. **Next WebSocket API** — Not publicly documented. Need from go-next.co:
+   - URL (likely `ws://127.0.0.1:?` on RD machine)
+   - Auth if any
+   - Exact JSON schema for `heat.loaded`, `pilot.crossing`, etc.
+   - **Workaround for dev:** mock event stream + fixture JSON until spec arrives
+
+2. **Pilot color format** — RGB object, hex string, or seat-index lookup?
+
+3. **Which gate flashes on `pilot.crossing`?** — Start gate only, or configurable per venue (e.g. finish gate)?
+
+4. **ESPHome entity names** — Standardize across gates or per-gate config field?
+
+5. **Port** — Default `8080`? Configurable?
+
+---
+
+## Dev environment assumptions
+
+- Race director laptop: **macOS or Windows**
+- GateStage runs locally alongside Next desktop app
+- ESPHome gates on same subnet (Nuclear Hazard race WiFi, 192.168.x.x typical)
+- RotorHazard timer IP configured in Next separately (existing plugin)
+
+### Local dev without hardware
+
+- Mock Next WebSocket server emitting sample events
+- Mock ESPHome HTTP server (or single real ESP32 on bench WiFi)
+
+---
+
+## Electron distribution notes (future)
+
+- Package with **Electron + electron-builder**
+- Nuclear Hazard crew URL pattern: `http://<rd-laptop-lan-ip>:8080`
+- Bind server to `0.0.0.0`
+- macOS notarization / Windows code signing optional for early releases
+- GitHub Releases for .dmg + .exe
+
+---
+
+## Naming / branding
+
+- **Product:** GateStage
+- **Repo:** `pluggedinn/GateStage` on GitHub
+- Avoid names too close to Next (`NXT Gates`, etc.)
+
+---
+
+## References
+
+- Next: https://go-next.co/
+- RotorHazard: https://www.rotorhazard.com/
+- NuclearQuads timers: https://nuclearquads.com/
+- ESPHome web API: https://esphome.io/web-api/
+- Next ↔ RH plugin: https://github.com/gvotteler/next-rotorhazard-plugin
+- OpenRace (similar MQTT gate idea): https://github.com/openrace/OpenRace
+
+---
+
+## First commands for implementing agent
+
+```bash
+cd GateStage
+# Scaffold (example — adjust versions)
+npx create-next-app@latest . --typescript --tailwind --app --no-src-dir
+npm install ws socket.io socket.io-client drizzle-orm better-sqlite3 zod
+npm install -D drizzle-kit @types/ws @types/better-sqlite3
+```
+
+Then implement `server.ts` + `lib/race-brain.ts` before building UI polish.
+
+**Priority order:** server brain → ESPHome manual control → Next listener (or mock) → mappings → UI → Electron.
