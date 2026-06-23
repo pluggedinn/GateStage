@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from "react";
 import { io, type Socket } from "socket.io-client";
 import type {
   RaceActionEnvelope,
@@ -11,7 +17,16 @@ type ConnectionState = {
   nextConnected: boolean;
 };
 
-export function useRaceSocket() {
+type RaceSocketValue = {
+  events: RaceEventEnvelope[];
+  actions: RaceActionEnvelope[];
+  connection: ConnectionState;
+  connected: boolean;
+};
+
+const RaceSocketContext = createContext<RaceSocketValue | null>(null);
+
+export function RaceSocketProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<RaceEventEnvelope[]>([]);
   const [actions, setActions] = useState<RaceActionEnvelope[]>([]);
   const [connection, setConnection] = useState<ConnectionState>({
@@ -42,5 +57,19 @@ export function useRaceSocket() {
     };
   }, []);
 
-  return { events, actions, connection, connected };
+  return (
+    <RaceSocketContext.Provider
+      value={{ events, actions, connection, connected }}
+    >
+      {children}
+    </RaceSocketContext.Provider>
+  );
+}
+
+export function useRaceSocket() {
+  const value = useContext(RaceSocketContext);
+  if (!value) {
+    throw new Error("useRaceSocket must be used within RaceSocketProvider");
+  }
+  return value;
 }

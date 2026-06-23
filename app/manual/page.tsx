@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { BrightnessControl } from "@/components/brightness-control";
 import { ColorPicker } from "@/components/color-picker";
@@ -8,6 +9,10 @@ import {
   EffectPicker,
   type EffectSelection,
 } from "@/components/effect-picker";
+import {
+  LedStripPreview,
+  type LedPreviewMode,
+} from "@/components/led-strip-preview";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -26,6 +31,40 @@ import {
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { defaultEffectParams } from "@/lib/effects";
 import type { Gate } from "@/lib/config/schema";
+import { cn } from "@/lib/utils";
+
+type StepCellProps = {
+  step: number;
+  title: string;
+  description: string;
+  children: ReactNode;
+  className?: string;
+};
+
+function StepCell({ step, title, description, children, className }: StepCellProps) {
+  return (
+    <section
+      className={cn(
+        "flex min-h-0 flex-col gap-3 rounded-lg border border-border bg-muted/20 p-4",
+        className,
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <span
+          className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold tabular-nums"
+          aria-hidden
+        >
+          {step}
+        </span>
+        <div className="min-w-0">
+          <h2 className="text-sm font-medium leading-tight">{title}</h2>
+          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="min-w-0 flex-1">{children}</div>
+    </section>
+  );
+}
 
 export default function ManualPage() {
   const [gates, setGates] = useState<Gate[]>([]);
@@ -33,12 +72,21 @@ export default function ManualPage() {
   const [brightnessPercent, setBrightnessPercent] = useState(
     DEFAULT_BRIGHTNESS_PERCENT,
   );
-  const [savingDefault, setSavingDefault] = useState(false);
+  const [mode, setMode] = useState<LedPreviewMode>("effect");
   const [effect, setEffect] = useState<EffectSelection>({
     effectId: "addressable_rainbow",
     params: defaultEffectParams("addressable_rainbow"),
   });
   const [rgb, setRgb] = useState({ r: 255, g: 0, b: 0 });
+
+  const gateItems = useMemo(
+    () =>
+      gates.map((g) => ({
+        value: g.id,
+        label: `${g.id} (${g.host})`,
+      })),
+    [gates],
+  );
 
   const loadGates = useCallback(async () => {
     const res = await fetch("/api/gates");
@@ -80,131 +128,217 @@ export default function ManualPage() {
     }
   }
 
-  async function saveDefaultBrightness() {
-    setSavingDefault(true);
-    try {
-      const res = await fetch("/api/settings", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ defaultBrightnessPercent: brightnessPercent }),
-      });
-      if (res.ok) {
-        toast.success("Default brightness saved", {
-          description: `${brightnessPercent}% for all automated mappings`,
-        });
-      } else {
-        toast.error("Could not save default brightness");
-      }
-    } finally {
-      setSavingDefault(false);
-    }
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Manual control</h1>
-        <p className="text-sm text-muted-foreground">
-          Override gate LEDs during race day
-        </p>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Gate</CardTitle>
-          <CardDescription>Select a gate to control</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <Select
-            value={selectedGateId}
-            onValueChange={(v) => v && setSelectedGateId(v)}
-          >
-            <SelectTrigger className="w-fit min-w-56 max-w-md *:data-[slot=select-value]:line-clamp-none">
-              <SelectValue placeholder="Select gate" />
-            </SelectTrigger>
-            <SelectContent className="max-w-md">
-              {gates.map((g) => (
-                <SelectItem key={g.id} value={g.id} className="font-mono">
-                  {g.id} ({g.host})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Brightness</CardTitle>
-          <CardDescription>
-            ESPHome sends 0–255; 5% is typical for 12V strips on race day
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <BrightnessControl
-            value={brightnessPercent}
-            onChange={setBrightnessPercent}
-            onSaveDefault={saveDefaultBrightness}
-            savingDefault={savingDefault}
-          />
-        </CardContent>
-      </Card>
-
-      <div className="grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Effect</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <EffectPicker value={effect} onChange={setEffect} />
-            <Button
-              className="w-full sm:w-auto"
-              onClick={() =>
-                send({
-                  kind: "effect",
-                  effectId: effect.effectId,
-                  params: effect.params,
-                  brightnessPercent,
-                })
-              }
+    <>
+      <div className="space-y-4 pb-40">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">
+            Manual control
+          </h1>
+          <p className="text-base text-muted-foreground">
+            Pick a gate, choose what the LEDs should do, then send the command.
+            Default brightness lives in{" "}
+            <Link
+              href="/settings"
+              className="text-foreground underline-offset-4 hover:underline"
             >
-              Run effect
-            </Button>
-          </CardContent>
-        </Card>
+              Settings
+            </Link>
+            .
+          </p>
+        </div>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Solid color</CardTitle>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Control steps</CardTitle>
+            <CardDescription>
+              Work left to right on wide screens; steps stack on smaller devices.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
-            <ColorPicker value={rgb} onChange={setRgb} label="Color" />
-            <Button
-              className="w-full"
-              onClick={() =>
-                send({ kind: "rgb", ...rgb, brightnessPercent })
-              }
+          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <StepCell
+              step={1}
+              title="Select gate"
+              description="Which gate strip are you controlling?"
             >
-              Set color
-            </Button>
-          </CardContent>
-        </Card>
+              <Select
+                value={selectedGateId}
+                onValueChange={(v) => v && setSelectedGateId(v)}
+                items={gateItems}
+              >
+                <SelectTrigger className="h-11 min-h-11 w-full text-base *:data-[slot=select-value]:line-clamp-none">
+                  <SelectValue placeholder="Select gate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {gates.map((g) => (
+                    <SelectItem
+                      key={g.id}
+                      value={g.id}
+                      className="font-mono text-base"
+                    >
+                      {g.id} ({g.host})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </StepCell>
 
-        <Card className="md:col-span-3">
-          <CardHeader>
-            <CardTitle>Off</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Button
-              variant="destructive"
-              className="w-full sm:w-auto"
-              onClick={() => send({ kind: "off" })}
+            <StepCell
+              step={2}
+              title="Choose behavior"
+              description="Effect, solid color, or off"
             >
-              Turn off
-            </Button>
+              <div
+                className="grid grid-cols-3 gap-2"
+                role="radiogroup"
+                aria-label="LED behavior"
+              >
+                {(
+                  [
+                    ["effect", "Effect"],
+                    ["solid", "Solid"],
+                    ["off", "Off"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    size="lg"
+                    role="radio"
+                    aria-checked={mode === value}
+                    variant={mode === value ? "default" : "outline"}
+                    className="min-h-11 px-2 text-sm sm:text-base"
+                    onClick={() => setMode(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+              </div>
+            </StepCell>
+
+            {mode === "off" ? (
+              <StepCell
+                step={3}
+                title="Turn off"
+                description="Send off to the selected gate"
+                className="sm:col-span-2 lg:col-span-1"
+              >
+                <Button
+                  size="lg"
+                  variant="destructive"
+                  className="min-h-11 w-full"
+                  disabled={!selectedGateId}
+                  onClick={() => void send({ kind: "off" })}
+                >
+                  Turn off gate
+                </Button>
+              </StepCell>
+            ) : (
+              <StepCell
+                step={3}
+                title="Brightness"
+                description="Brightness for this command"
+                className="sm:col-span-2 lg:col-span-1"
+              >
+                <BrightnessControl
+                  value={brightnessPercent}
+                  onChange={setBrightnessPercent}
+                />
+              </StepCell>
+            )}
+
+            {mode === "effect" ? (
+              <StepCell
+                step={4}
+                title="Choose effect"
+                description="Built-in ESPHome strip effects"
+                className="sm:col-span-2 lg:col-span-3"
+              >
+                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                  <EffectPicker
+                    layout="inline"
+                    className="min-w-0 flex-1"
+                    value={effect}
+                    onChange={(next) => {
+                      setMode("effect");
+                      setEffect(next);
+                    }}
+                  />
+                  <Button
+                    size="lg"
+                    className="min-h-11 w-full shrink-0 md:w-auto md:min-w-36"
+                    disabled={!selectedGateId}
+                    onClick={() =>
+                      void send({
+                        kind: "effect",
+                        effectId: effect.effectId,
+                        params: effect.params,
+                        brightnessPercent,
+                      })
+                    }
+                  >
+                    Apply effect
+                  </Button>
+                </div>
+              </StepCell>
+            ) : null}
+
+            {mode === "solid" ? (
+              <StepCell
+                step={4}
+                title="Choose color"
+                description="Single RGB across the strip"
+                className="sm:col-span-2 lg:col-span-3"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <ColorPicker
+                    layout="inline"
+                    className="min-w-0 flex-1"
+                    value={rgb}
+                    onChange={(next) => {
+                      setMode("solid");
+                      setRgb(next);
+                    }}
+                    label="Color"
+                  />
+                  <Button
+                    size="lg"
+                    className="min-h-11 w-full shrink-0 sm:w-auto sm:min-w-36"
+                    disabled={!selectedGateId}
+                    onClick={() =>
+                      void send({ kind: "rgb", ...rgb, brightnessPercent })
+                    }
+                  >
+                    Apply color
+                  </Button>
+                </div>
+              </StepCell>
+            ) : null}
           </CardContent>
         </Card>
       </div>
-    </div>
+
+      <div
+        className={cn(
+          "fixed inset-x-0 bottom-0 z-40 border-t border-border",
+          "bg-card/95 backdrop-blur supports-backdrop-filter:bg-card/80",
+        )}
+        data-testid="manual-preview-dock"
+      >
+        <div className="mx-auto w-full max-w-6xl px-4 py-3">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Preview
+          </p>
+          <LedStripPreview
+            mode={mode}
+            brightnessPercent={brightnessPercent}
+            rgb={rgb}
+            effectId={effect.effectId}
+            gateId={selectedGateId || undefined}
+            data-testid="led-strip-preview"
+          />
+        </div>
+      </div>
+    </>
   );
 }

@@ -31,6 +31,7 @@ app.prepare().then(() => {
     socket.emit("connection:next", {
       nextConnected: nextListener?.isConnected() ?? false,
     });
+    broadcaster.replayRecent(socket);
     socket.on("disconnect", () => {
       console.log("[socket.io] client disconnected", socket.id);
     });

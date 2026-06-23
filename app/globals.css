@@ -39,6 +39,10 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
+  --color-status-ok: var(--status-ok);
+  --color-status-warn: var(--status-warn);
+  --color-status-error: var(--status-error);
+  --color-status-muted: var(--status-muted);
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
   --radius-lg: var(--radius);
@@ -81,6 +85,10 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  --status-ok: oklch(0.55 0.14 155);
+  --status-warn: oklch(0.58 0.14 75);
+  --status-error: oklch(0.55 0.2 25);
+  --status-muted: oklch(0.55 0.02 265);
 }
 
 .dark {
@@ -115,6 +123,10 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --status-ok: oklch(0.75 0.15 155);
+  --status-warn: oklch(0.78 0.14 75);
+  --status-error: oklch(0.65 0.2 25);
+  --status-muted: oklch(0.45 0.02 265);
 }
 
 @layer base {
@@ -123,8 +135,74 @@
   }
   body {
     @apply bg-background text-foreground;
+    text-wrap: pretty;
   }
   html {
     @apply font-sans;
   }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+/* LED strip preview animations (Manual page) */
+@keyframes led-rainbow-shift {
+  from {
+    filter: hue-rotate(0deg);
+  }
+  to {
+    filter: hue-rotate(360deg);
+  }
+}
+
+@keyframes led-pulse-glow {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes led-strobe-flash {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0.08;
+  }
+}
+
+@keyframes led-scan-sweep {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+.led-animate-rainbow {
+  animation: led-rainbow-shift 4s linear infinite;
+}
+
+.led-animate-pulse {
+  animation: led-pulse-glow 1.5s ease-in-out infinite;
+}
+
+.led-animate-strobe {
+  animation: led-strobe-flash 0.4s steps(2, end) infinite;
+}
+
+.led-animate-scan {
+  animation: led-scan-sweep 2s linear infinite;
 }

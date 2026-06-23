@@ -5,15 +5,15 @@ test.describe("Dashboard", () => {
   test("shows race event after mock Next emit", async ({ page }) => {
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
-    await expect(page.getByText("Socket.io connected")).toBeVisible({
-      timeout: 15_000,
-    });
-    await expect(page.getByText("Next connected")).toBeVisible({
-      timeout: 15_000,
-    });
+    const connections = page.getByTestId("connection-status");
+    await expect(connections).toBeVisible({ timeout: 15_000 });
+    await expect(connections.getByText("Socket")).toBeVisible();
+    await expect(connections.getByText("Next")).toBeVisible();
 
     await emitNextEvent("heat.go");
 
-    await expect(page.getByText("heat.go")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("last-event-type")).toHaveText("heat.go", {
+      timeout: 10_000,
+    });
   });
 });

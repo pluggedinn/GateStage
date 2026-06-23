@@ -74,6 +74,7 @@ Export/import via `GET/POST /api/config`.
 ## Docs
 
 - [HANDOFF.md](./docs/HANDOFF.md) — implementation guide for agents
+- [DESIGN.md](./docs/DESIGN.md) — UI design system and semantic color tokens
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — hardware/network context
 - [ESPHOME.md](./docs/ESPHOME.md) — gate firmware setup (sample: [`docs/examples/gate.yaml`](./docs/examples/gate.yaml))
 

@@ -169,8 +169,8 @@ export default function GatesPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">Gates</h1>
-          <p className="text-sm text-muted-foreground">
+          <h1 className="text-3xl font-semibold tracking-tight">Gates</h1>
+          <p className="text-base text-muted-foreground">
             ESPHome gates are discovered automatically via mDNS on the race LAN.
           </p>
         </div>
@@ -189,7 +189,7 @@ export default function GatesPage() {
         </CardHeader>
         <CardContent>
           {gates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-base text-muted-foreground">
               No gates yet. Ensure ESPHome devices are on the same WiFi with
               mDNS enabled, or add one manually below.
             </p>

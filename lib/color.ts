@@ -26,3 +26,24 @@ export function hexToRgb(hex: string): Rgb {
     b: num & 255,
   };
 }
+
+/** Parse `rgb(r,g,b)` from gate action command labels (see gate-engine describeCommand). */
+export function parseRgbFromCommand(command: string): Rgb | null {
+  const match = command.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
+  if (!match) return null;
+  return {
+    r: Number(match[1]),
+    g: Number(match[2]),
+    b: Number(match[3]),
+  };
+}
+
+/** Scale RGB channels as ESPHome brightness would (0–100%). */
+export function applyBrightnessToRgb(rgb: Rgb, brightnessPercent: number): Rgb {
+  const scale = Math.min(100, Math.max(0, brightnessPercent)) / 100;
+  return {
+    r: clampChannel(rgb.r * scale),
+    g: clampChannel(rgb.g * scale),
+    b: clampChannel(rgb.b * scale),
+  };
+}

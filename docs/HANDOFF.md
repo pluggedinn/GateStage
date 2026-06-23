@@ -225,6 +225,8 @@ GateStage/
 
 No login page in v1.
 
+Visual system (colors, typography, semantic tokens): [DESIGN.md](./DESIGN.md).
+
 ---
 
 ## ESPHome integration (v1)

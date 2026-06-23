@@ -22,10 +22,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${arimo.variable} dark h-full antialiased`}
+      className={`${arimo.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="flex min-h-full flex-col bg-background">
+      <body className="flex min-h-full flex-col bg-background text-base">
         <Providers>
           <Nav />
           <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { BrightnessControl } from "@/components/brightness-control";
 import { ColorPicker } from "@/components/color-picker";
@@ -65,6 +65,15 @@ export default function MappingsPage() {
     DEFAULT_BRIGHTNESS_PERCENT,
   );
   const [mappingToDelete, setMappingToDelete] = useState<string | null>(null);
+
+  const targetItems = useMemo(
+    () => [
+      { value: "all", label: "All gates" },
+      { value: "start_gate", label: "Start gate" },
+      ...gates.map((g) => ({ value: `gate:${g.id}`, label: g.id })),
+    ],
+    [gates],
+  );
 
   const load = useCallback(async () => {
     const [mRes, gRes, sRes] = await Promise.all([
@@ -186,8 +195,8 @@ export default function MappingsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Mappings</h1>
-        <p className="text-sm text-muted-foreground">
+        <h1 className="text-3xl font-semibold tracking-tight">Mappings</h1>
+        <p className="text-base text-muted-foreground">
           Race event to gate action rules
         </p>
       </div>
@@ -218,7 +227,11 @@ export default function MappingsPage() {
             </div>
             <div className="space-y-2">
               <Label>Target</Label>
-              <Select value={target} onValueChange={(v) => v && setTarget(v)}>
+              <Select
+                value={target}
+                onValueChange={(v) => v && setTarget(v)}
+                items={targetItems}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
