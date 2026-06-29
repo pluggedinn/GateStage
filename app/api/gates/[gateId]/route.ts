@@ -8,7 +8,6 @@ type Params = { params: Promise<{ gateId: string }> };
 export async function PATCH(request: Request, { params }: Params) {
   const { gateId } = await params;
   const body = (await request.json()) as Partial<{
-    host: string;
     isStartGate: boolean;
     enabled: boolean;
     sortOrder: number;
@@ -29,7 +28,6 @@ export async function PATCH(request: Request, { params }: Params) {
       if (g.id !== gateId) return g;
       updated = {
         ...g,
-        ...(body.host !== undefined && { host: body.host }),
         ...(body.isStartGate !== undefined && {
           isStartGate: body.isStartGate,
         }),
@@ -44,20 +42,6 @@ export async function PATCH(request: Request, { params }: Params) {
   return NextResponse.json(updated);
 }
 
-export async function DELETE(_request: Request, { params }: Params) {
-  const { gateId } = await params;
-  const existing = getGate(gateId);
-  if (!existing) {
-    return NextResponse.json({ error: "Gate not found" }, { status: 404 });
-  }
-
-  saveConfig((config) => ({
-    ...config,
-    gates: config.gates.filter((g) => g.id !== gateId),
-  }));
-  broadcaster.emitConfigUpdated();
-  return NextResponse.json({ ok: true });
-}
 
 export async function POST(request: Request, { params }: Params) {
   const { gateId } = await params;

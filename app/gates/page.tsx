@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,8 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import {
   Table,
@@ -28,16 +25,13 @@ import type { Gate } from "@/lib/config/schema";
 type DiscoverResult = {
   added: string[];
   updated: string[];
+  removed: string[];
   discovered: { id: string; host: string; source: string }[];
 };
 
 export default function GatesPage() {
   const [gates, setGates] = useState<Gate[]>([]);
-  const [gateId, setGateId] = useState("");
-  const [host, setHost] = useState("");
-  const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [gateToDelete, setGateToDelete] = useState<string | null>(null);
 
   const loadGates = useCallback(async () => {
     const res = await fetch("/api/gates");
@@ -57,16 +51,23 @@ export default function GatesPage() {
           id: toastId,
           description: "No ESPHome devices responded on the network.",
         });
-      } else if (data.added.length === 0 && data.updated.length === 0) {
+      } else if (
+        data.added.length === 0 &&
+        data.updated.length === 0 &&
+        data.removed.length === 0
+      ) {
         toast.success("Scan complete", {
           id: toastId,
-          description: `Found ${data.discovered.length} gate(s); config already up to date.`,
+          description: `${data.discovered.length} gate(s) on the network.`,
         });
       } else {
         const parts: string[] = [];
         if (data.added.length > 0) parts.push(`added ${data.added.join(", ")}`);
         if (data.updated.length > 0) {
           parts.push(`updated ${data.updated.join(", ")}`);
+        }
+        if (data.removed.length > 0) {
+          parts.push(`removed ${data.removed.join(", ")}`);
         }
         toast.success("Scan complete", {
           id: toastId,
@@ -86,28 +87,6 @@ export default function GatesPage() {
   useEffect(() => {
     void loadGates();
   }, [loadGates]);
-
-  async function addGate(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    const res = await fetch("/api/gates", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: gateId, host }),
-    });
-    setLoading(false);
-    if (res.ok) {
-      toast.success("Gate added", { description: `${gateId} @ ${host}` });
-      setGateId("");
-      setHost("");
-      await loadGates();
-    } else {
-      const data = (await res.json()) as { error?: string };
-      toast.error("Could not add gate", {
-        description: data.error ?? `HTTP ${res.status}`,
-      });
-    }
-  }
 
   async function toggleStartGate(gate: Gate) {
     await fetch(`/api/gates/${gate.id}`, {
@@ -159,19 +138,14 @@ export default function GatesPage() {
     }
   }
 
-  async function deleteGate(gateId: string) {
-    await fetch(`/api/gates/${gateId}`, { method: "DELETE" });
-    toast.success("Gate removed", { description: gateId });
-    await loadGates();
-  }
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Gates</h1>
           <p className="text-base text-muted-foreground">
-            ESPHome gates are discovered automatically via mDNS on the race LAN.
+            Gates are discovered from ESPHome devices on the race LAN via mDNS.
+            The list syncs automatically every 15 seconds.
           </p>
         </div>
         <Button onClick={() => void scanNetwork()} disabled={scanning}>
@@ -181,17 +155,17 @@ export default function GatesPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Configured gates</CardTitle>
+          <CardTitle>Discovered gates</CardTitle>
           <CardDescription>
-            {gates.length} gate(s)
+            {gates.length} gate(s) on the network
             {scanning ? " · scanning…" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {gates.length === 0 ? (
             <p className="text-base text-muted-foreground">
-              No gates yet. Ensure ESPHome devices are on the same WiFi with
-              mDNS enabled, or add one manually below.
+              No gates on the network. Ensure ESPHome devices are powered on,
+              on the same WiFi, and advertising mDNS — then scan.
             </p>
           ) : (
             <Table>
@@ -243,13 +217,6 @@ export default function GatesPage() {
                       >
                         Ping
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => setGateToDelete(gate.id)}
-                      >
-                        Delete
-                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -258,56 +225,6 @@ export default function GatesPage() {
           )}
         </CardContent>
       </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Add gate manually</CardTitle>
-          <CardDescription>
-            Last resort if mDNS discovery cannot find a device.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={addGate} className="flex flex-wrap items-end gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="gate-id">ID</Label>
-              <Input
-                id="gate-id"
-                value={gateId}
-                onChange={(e) => setGateId(e.target.value)}
-                placeholder="gate-start"
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="host">Host</Label>
-              <Input
-                id="host"
-                value={host}
-                onChange={(e) => setHost(e.target.value)}
-                placeholder="192.168.4.21"
-                required
-              />
-            </div>
-            <Button type="submit" variant="secondary" disabled={loading}>
-              Add manually
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
-
-      <ConfirmDialog
-        open={gateToDelete !== null}
-        onOpenChange={(open) => !open && setGateToDelete(null)}
-        title="Delete gate?"
-        description={
-          gateToDelete
-            ? `Remove ${gateToDelete} from GateStage. The ESPHome device is not affected.`
-            : undefined
-        }
-        onConfirm={() =>
-          gateToDelete ? deleteGate(gateToDelete) : Promise.resolve()
-        }
-      />
     </div>
   );
 }

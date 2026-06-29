@@ -26,7 +26,7 @@ export default defineConfig({
     },
     {
       command:
-        "GATESTAGE_CONFIG_PATH=./data/e2e-config.json npm run dev:server",
+        "ESPHOME_MOCK_FLEET=1 GATESTAGE_CONFIG_PATH=./data/e2e-config.json npm run dev:server",
       url: "http://127.0.0.1:8080/api/health",
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

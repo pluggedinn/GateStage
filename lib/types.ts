@@ -67,6 +67,9 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
       .record(z.string(), z.union([z.number(), z.boolean()]))
       .optional(),
     brightnessPercent: z.number().int().min(1).max(100).optional(),
+    r: z.number().int().min(0).max(255).optional(),
+    g: z.number().int().min(0).max(255).optional(),
+    b: z.number().int().min(0).max(255).optional(),
   }),
   z.object({
     kind: z.literal("pilot_color"),
@@ -86,6 +89,29 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
 
 export type MappingAction = z.infer<typeof mappingActionSchema>;
 export type MappingTarget = z.infer<typeof mappingTargetSchema>;
+
+export const sequenceActionStepSchema = z.object({
+  id: z.string(),
+  kind: z.literal("action"),
+  target: mappingTargetSchema,
+  targetGateId: z.string().nullable().default(null),
+  action: mappingActionSchema,
+});
+
+export const sequenceDelayStepSchema = z.object({
+  id: z.string(),
+  kind: z.literal("delay"),
+  ms: z.number().int().min(0).max(600_000),
+});
+
+export const sequenceStepSchema = z.discriminatedUnion("kind", [
+  sequenceActionStepSchema,
+  sequenceDelayStepSchema,
+]);
+
+export type SequenceStep = z.infer<typeof sequenceStepSchema>;
+export type SequenceActionStep = z.infer<typeof sequenceActionStepSchema>;
+export type SequenceDelayStep = z.infer<typeof sequenceDelayStepSchema>;
 
 export type RaceEventEnvelope = {
   type: RaceEvent["type"];

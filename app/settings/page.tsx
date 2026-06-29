@@ -62,7 +62,7 @@ export default function SettingsPage() {
         { defaultBrightnessPercent: brightnessPercent },
         () =>
           toast.success("Default brightness saved", {
-            description: `${brightnessPercent}% for automated mappings and manual defaults`,
+            description: `${brightnessPercent}% for automated routines and manual defaults`,
           }),
         () => toast.error("Could not save default brightness"),
       );
@@ -100,7 +100,7 @@ export default function SettingsPage() {
         <CardHeader>
           <CardTitle>Default brightness</CardTitle>
           <CardDescription>
-            Used for new mappings and as the starting value on the Manual page.
+            Used for new routine steps and as the starting value on the Manual page.
             ESPHome sends 0–255; 5% is typical for 12V strips on race day.
           </CardDescription>
         </CardHeader>

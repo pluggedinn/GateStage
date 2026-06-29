@@ -3,19 +3,26 @@ import type { Gate } from "@/lib/config/schema";
 import {
   getDefaultBrightnessPercent,
   getGates,
-  getMappings,
+  getSequence,
 } from "@/lib/config/store";
 import { resolveBrightnessPercent } from "@/lib/brightness";
 import { describeEffectAction } from "@/lib/effects";
+import { describeDelayStep } from "@/lib/sequence-display";
 import { type EsphomeCommand, sendEsphomeCommand } from "@/lib/esphome";
 import type {
   MappingAction,
   RaceActionEnvelope,
   RaceEvent,
+  SequenceActionStep,
 } from "@/lib/types";
 
 const crossingDebounceMs = 400;
+const ROUTINE_LOG_GATE = "routine";
 const lastCrossingByPilot = new Map<string, number>();
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
 
 export class GateEngine {
   constructor(private broadcaster: Broadcaster) {}
@@ -28,21 +35,30 @@ export class GateEngine {
       lastCrossingByPilot.set(event.pilot.id, now);
     }
 
-    const mappings = getMappings().filter(
-      (m) => m.enabled && m.eventType === event.type,
-    );
+    const sequence = getSequence(event.type);
+    if (!sequence?.enabled || sequence.steps.length === 0) return;
+
     const enabledGates = getGates().filter((g) => g.enabled);
 
-    for (const mapping of mappings) {
+    for (const step of sequence.steps) {
+      if (step.kind === "delay") {
+        const label = describeDelayStep(step.ms);
+        this.broadcaster.emitRaceAction({
+          gateId: ROUTINE_LOG_GATE,
+          command: label,
+          success: true,
+          at: new Date().toISOString(),
+        });
+        await sleep(step.ms);
+        continue;
+      }
+
       const targets = this.resolveTargets(
-        mapping.target,
-        mapping.targetGateId,
+        step.target,
+        step.targetGateId,
         enabledGates,
       );
-      const command = this.actionToCommand(
-        mapping.action as MappingAction,
-        event,
-      );
+      const command = this.actionToCommand(step.action, event);
       if (!command) continue;
 
       await Promise.allSettled(
@@ -74,7 +90,7 @@ export class GateEngine {
   }
 
   private resolveTargets(
-    target: string,
+    target: SequenceActionStep["target"],
     targetGateId: string | null,
     enabledGates: Gate[],
   ) {
@@ -96,10 +112,7 @@ export class GateEngine {
   ): EsphomeCommand | null {
     switch (action.kind) {
       case "effect": {
-        const effectId =
-          action.effectId ??
-          action.name ??
-          "pulse";
+        const effectId = action.effectId ?? action.name ?? "pulse";
         return {
           kind: "effect",
           effectId,
@@ -108,6 +121,11 @@ export class GateEngine {
             action,
             getDefaultBrightnessPercent(),
           ),
+          ...(action.r !== undefined && {
+            r: action.r,
+            g: action.g,
+            b: action.b,
+          }),
         };
       }
       case "solid":

@@ -34,7 +34,8 @@ curl -X POST http://127.0.0.1:9401/sequence \
 ### Check mock ESPHome gate commands
 
 ```bash
-curl http://127.0.0.1:9080/state
+curl http://127.0.0.1:9080/state   # gate-start
+curl http://127.0.0.1:9085/state   # gate-finish
 ```
 
 ## Ports
@@ -44,7 +45,7 @@ curl http://127.0.0.1:9080/state
 | GateStage | 8080 | http://127.0.0.1:8080 |
 | Mock Next WebSocket | 9400 | ws://127.0.0.1:9400 |
 | Mock Next HTTP control | 9401 | http://127.0.0.1:9401 |
-| Mock ESPHome | 9080 | http://127.0.0.1:9080 |
+| Mock ESPHome fleet | 9080–9085 | gate-start … gate-finish |
 
 ## Scripts
 
@@ -53,13 +54,14 @@ curl http://127.0.0.1:9080/state
 | `npm run dev` | GateStage server only (expects mocks or real hardware) |
 | `npm run dev:mocks` | Mocks + GateStage |
 | `npm run mock:next` | Mock Next RD WebSocket server |
-| `npm run mock:esphome` | Mock ESPHome REST server |
+| `npm run mock:esphome` | Six mock ESPHome REST servers (ports 9080–9085) |
+| `npm run mock:esphome:single` | One mock ESPHome server on port 9080 |
 | `npm run test:e2e` | Playwright E2E tests |
 | `npm run build` | Production build |
 
 ## Config
 
-Settings are stored in `data/config.json` (Zod-validated JSON, gitignored). **Gates are discovered automatically** via mDNS (`_esphomelib._tcp`) on startup and every 60 seconds. Manual add is available on `/gates` as a fallback.
+Settings are stored in `data/config.json` (Zod-validated JSON, gitignored). **Gates are synced from the network** via mDNS (`_esphomelib._tcp`) on startup and every 15 seconds — only reachable devices on the LAN appear in the list.
 
 Trigger a scan anytime:
 
@@ -67,7 +69,7 @@ Trigger a scan anytime:
 curl -X POST http://127.0.0.1:8080/api/gates/discover
 ```
 
-In dev, the mock ESPHome host (`ESPHOME_MOCK_HOST`, default `127.0.0.1:9080`) is included in discovery even without mDNS.
+In dev (`ESPHOME_MOCK_FLEET=1`), six mock gates are included in discovery: `gate-start`, `gate-2` … `gate-5`, `gate-finish` on ports 9080–9085.
 
 Export/import via `GET/POST /api/config`.
 
@@ -76,7 +78,7 @@ Export/import via `GET/POST /api/config`.
 - [HANDOFF.md](./docs/HANDOFF.md) — implementation guide for agents
 - [DESIGN.md](./docs/DESIGN.md) — UI design system and semantic color tokens
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — hardware/network context
-- [ESPHOME.md](./docs/ESPHOME.md) — gate firmware setup (sample: [`docs/examples/gate.yaml`](./docs/examples/gate.yaml))
+- [ESPHOME.md](./docs/ESPHOME.md) — gate firmware setup ([`docs/examples/gate.yaml`](./docs/examples/gate.yaml), XIAO ESP32-C5 + WS2811)
 
 ## Race environment
 

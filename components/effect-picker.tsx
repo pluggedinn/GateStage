@@ -1,10 +1,13 @@
 "use client";
 
 import { useMemo } from "react";
+import { ColorPicker } from "@/components/color-picker";
 import {
+  EFFECT_BY_ID,
   EFFECT_CATALOG,
-  defaultEffectParams,
+  defaultEffectSelection,
   mergeEffectParams,
+  type EffectSelection,
 } from "@/lib/effects";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,15 +18,13 @@ import {
   SelectItem,
   SelectLabel,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { LightEffectPreview } from "@/components/light-effect-preview";
+import { EFFECT_PREVIEW_BY_ID } from "@/lib/effect-preview";
 import { cn } from "@/lib/utils";
 
-export type EffectSelection = {
-  effectId: string;
-  params: Record<string, number | boolean>;
-};
+export type { EffectSelection };
 
 type EffectPickerProps = {
   value: EffectSelection;
@@ -36,16 +37,20 @@ type EffectPickerProps = {
 const BASIC_EFFECTS = EFFECT_CATALOG.filter((e) => e.category === "basic");
 const STRIP_EFFECTS = EFFECT_CATALOG.filter((e) => e.category === "strip");
 
-const EFFECT_ITEM_GROUPS = [
-  {
-    label: "Basic",
-    items: BASIC_EFFECTS.map((e) => ({ value: e.id, label: e.name })),
-  },
-  {
-    label: "Strip",
-    items: STRIP_EFFECTS.map((e) => ({ value: e.id, label: e.name })),
-  },
-] as const;
+function effectPreviewLabel(name: string): string {
+  return `Animated preview of the ${name} effect`;
+}
+
+function EffectPreview({ effectId, name }: { effectId: string; name: string }) {
+  const previewType = EFFECT_PREVIEW_BY_ID[effectId];
+  if (!previewType) return null;
+  return (
+    <LightEffectPreview
+      type={previewType}
+      label={effectPreviewLabel(name)}
+    />
+  );
+}
 
 export function EffectPicker({
   value,
@@ -60,12 +65,26 @@ export function EffectPicker({
   );
 
   function setEffectId(effectId: string) {
-    onChange({ effectId, params: defaultEffectParams(effectId) });
+    const next = defaultEffectSelection(effectId);
+    const prev = EFFECT_BY_ID.get(value.effectId);
+    const picked = EFFECT_BY_ID.get(effectId);
+    if (
+      picked?.supportsColor &&
+      prev?.supportsColor &&
+      value.r !== undefined &&
+      value.g !== undefined &&
+      value.b !== undefined
+    ) {
+      next.r = value.r;
+      next.g = value.g;
+      next.b = value.b;
+    }
+    onChange(next);
   }
 
   function setParam(key: string, next: number | boolean) {
     onChange({
-      effectId: value.effectId,
+      ...value,
       params: { ...value.params, [key]: next },
     });
   }
@@ -76,47 +95,69 @@ export function EffectPicker({
       <Select
         value={value.effectId}
         onValueChange={(v) => v && setEffectId(v)}
-        items={EFFECT_ITEM_GROUPS}
       >
-        <SelectTrigger className={layout === "inline" ? "w-full" : undefined}>
-          <SelectValue />
+        <SelectTrigger className={layout === "inline" ? "w-full" : "min-w-48"}>
+          <div className="flex min-w-0 flex-1 items-center gap-2.5">
+            {effect ? (
+              <EffectPreview effectId={effect.id} name={effect.name} />
+            ) : null}
+            <span className="truncate">
+              {effect?.name ?? "Select effect"}
+            </span>
+          </div>
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent className="min-w-(--anchor-width) w-max max-w-none">
           <SelectGroup>
             <SelectLabel>Basic</SelectLabel>
             {BASIC_EFFECTS.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.name}
+              <SelectItem key={e.id} value={e.id} className="py-2">
+                <EffectPreview effectId={e.id} name={e.name} />
+                <span>{e.name}</span>
               </SelectItem>
             ))}
           </SelectGroup>
           <SelectGroup>
             <SelectLabel>Strip</SelectLabel>
             {STRIP_EFFECTS.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.name}
+              <SelectItem key={e.id} value={e.id} className="py-2">
+                <EffectPreview effectId={e.id} name={e.name} />
+                <span>{e.name}</span>
               </SelectItem>
             ))}
           </SelectGroup>
         </SelectContent>
       </Select>
       {effect ? (
-        <p className="text-xs text-muted-foreground">{effect.description}</p>
+        <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-muted/30 p-3">
+          <EffectPreview effectId={effect.id} name={effect.name} />
+          <p className="min-w-0 pt-0.5 text-xs text-muted-foreground">
+            {effect.description}
+          </p>
+        </div>
       ) : null}
     </div>
   );
 
+  const colorPanel =
+    effect?.supportsColor &&
+    value.r !== undefined &&
+    value.g !== undefined &&
+    value.b !== undefined ? (
+      <ColorPicker
+        label="Color"
+        value={{ r: value.r, g: value.g, b: value.b }}
+        onChange={(rgb) => onChange({ ...value, ...rgb })}
+      />
+    ) : null;
+
   const paramsPanel =
     effect && effect.params.length > 0 ? (
-      <div
-        className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 xl:grid-cols-3"
-      >
+      <div className="grid gap-3 rounded-lg border border-border p-3 sm:grid-cols-2 xl:grid-cols-3">
         <p className="text-xs font-medium text-muted-foreground sm:col-span-2 xl:col-span-3">
           Parameters
         </p>
         {effect.params.map((param) => {
           const current = mergedParams[param.key];
-          const yamlNote = param.yamlOnly ? " (gate YAML)" : "";
 
           if (param.type === "bool") {
             return (
@@ -126,7 +167,6 @@ export function EffectPicker({
               >
                 <Label htmlFor={param.key} className="text-sm font-normal">
                   {param.label}
-                  {yamlNote}
                 </Label>
                 <Switch
                   id={param.key}
@@ -141,7 +181,6 @@ export function EffectPicker({
             <div key={param.key} className="space-y-1.5">
               <Label htmlFor={param.key} className="text-sm font-normal">
                 {param.label}
-                {yamlNote}
                 {param.type === "milliseconds" && " (ms)"}
                 {param.type === "seconds" && " (s)"}
                 {param.type === "percent" && " (%)"}
@@ -170,7 +209,10 @@ export function EffectPicker({
         )}
       >
         {effectSelect}
-        {paramsPanel}
+        <div className="space-y-4">
+          {colorPanel}
+          {paramsPanel}
+        </div>
       </div>
     );
   }
@@ -178,6 +220,7 @@ export function EffectPicker({
   return (
     <div className={cn("space-y-4", className)}>
       {effectSelect}
+      {colorPanel}
       {paramsPanel}
     </div>
   );

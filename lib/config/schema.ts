@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { mappingActionSchema } from "@/lib/types";
+import { sequenceStepSchema } from "@/lib/types";
 
 export const gateSchema = z.object({
   id: z.string().min(1),
@@ -9,13 +9,11 @@ export const gateSchema = z.object({
   sortOrder: z.number().int().default(0),
 });
 
-export const eventMappingSchema = z.object({
+export const eventSequenceSchema = z.object({
   id: z.string(),
   eventType: z.string().min(1),
-  target: z.enum(["all", "start_gate", "gate_id"]),
-  targetGateId: z.string().nullable().default(null),
-  action: mappingActionSchema,
   enabled: z.boolean().default(true),
+  steps: z.array(sequenceStepSchema),
 });
 
 export const settingsSchema = z.object({
@@ -25,13 +23,15 @@ export const settingsSchema = z.object({
 });
 
 export const configSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   settings: settingsSchema,
   gates: z.array(gateSchema),
-  mappings: z.array(eventMappingSchema),
+  sequences: z.array(eventSequenceSchema),
 });
 
 export type Gate = z.infer<typeof gateSchema>;
-export type EventMapping = z.infer<typeof eventMappingSchema>;
+export type EventSequence = z.infer<typeof eventSequenceSchema>;
 export type Settings = z.infer<typeof settingsSchema>;
 export type Config = z.infer<typeof configSchema>;
+
+export type { SequenceStep } from "@/lib/types";

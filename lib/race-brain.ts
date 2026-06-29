@@ -1,6 +1,6 @@
 import { broadcaster } from "./broadcaster";
-import { initConfig, mergeDiscoveredGates } from "./config/store";
-import { discoverGates } from "./gate-discovery";
+import { initConfig } from "./config/store";
+import { syncGatesFromNetwork } from "./gate-discovery";
 import { GateEngine } from "./gate-engine";
 import { NextListener } from "./next-listener";
 
@@ -10,7 +10,7 @@ let initialized = false;
 let discoveryTimer: NodeJS.Timeout | null = null;
 
 const DISCOVERY_INTERVAL_MS = Number(
-  process.env.GATESTAGE_DISCOVERY_INTERVAL_MS ?? 60_000,
+  process.env.GATESTAGE_DISCOVERY_INTERVAL_MS ?? 15_000,
 );
 
 export function getRaceBrain() {
@@ -22,12 +22,15 @@ export function getRaceBrain() {
 
 async function runGateDiscovery() {
   try {
-    const discovered = await discoverGates();
-    const result = mergeDiscoveredGates(discovered);
+    const result = await syncGatesFromNetwork();
 
-    if (result.added.length > 0 || result.updated.length > 0) {
+    if (
+      result.added.length > 0 ||
+      result.updated.length > 0 ||
+      result.removed.length > 0
+    ) {
       console.log(
-        `[discovery] added=${result.added.join(",") || "none"} updated=${result.updated.join(",") || "none"}`,
+        `[discovery] added=${result.added.join(",") || "none"} updated=${result.updated.join(",") || "none"} removed=${result.removed.join(",") || "none"}`,
       );
       broadcaster.emitConfigUpdated();
     }

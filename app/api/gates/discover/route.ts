@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { broadcaster } from "@/lib/broadcaster";
-import { mergeDiscoveredGates } from "@/lib/config/store";
-import { discoverGates } from "@/lib/gate-discovery";
+import { syncGatesFromNetwork } from "@/lib/gate-discovery";
 
 export async function POST() {
-  const discovered = await discoverGates();
-  const result = mergeDiscoveredGates(discovered);
+  const result = await syncGatesFromNetwork();
 
-  if (result.added.length > 0 || result.updated.length > 0) {
+  if (
+    result.added.length > 0 ||
+    result.updated.length > 0 ||
+    result.removed.length > 0
+  ) {
     broadcaster.emitConfigUpdated();
   }
 

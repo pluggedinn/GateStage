@@ -1,6 +1,6 @@
 # GateStage — ESPHome Gate Configuration
 
-Recommended firmware for each LED gate ESP32-C5. GateStage discovers gates via **mDNS** (`_esphomelib._tcp`) and controls them over **HTTP REST** (`web_server`).
+Recommended firmware for each LED gate. GateStage discovers gates via **mDNS** (`_esphomelib._tcp`) and controls them over **HTTP REST** (`web_server`).
 
 ---
 
@@ -8,26 +8,59 @@ Recommended firmware for each LED gate ESP32-C5. GateStage discovers gates via *
 
 Full working example: [`docs/examples/gate.yaml`](./examples/gate.yaml)
 
+```bash
+cd docs/examples
+esphome run gate.yaml
+```
+
+GateStage will discover the gate automatically once it is on the same LAN as the server.
+
+### Reference hardware (sample defaults)
+
+| Item | Value |
+|------|-------|
+| Board | [Seeed XIAO ESP32-C5](https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/) |
+| Strip | WS2811, 60 LEDs |
+| Data pin | **D8** → `GPIO8` |
+| Power | 12 V strip PSU (separate); ESP drives **data only** |
+| Networking | DHCP (no static IP in YAML) |
+
+**Wiring:** Connect strip **GND** to XIAO **GND**. Connect strip **DATA** to **D8**. Do **not** power the 12 V strip from the XIAO. If colors look wrong after flashing, try `rgb_order: RGB` instead of `GRB` in `gate.yaml`.
+
+### WiFi credentials
+
+Edit the `wifi:` block in `gate.yaml` before flashing:
+
+```yaml
+wifi:
+  ssid: "I dont take naps-5G"
+  password: "broccoli"
+  ap:
+    password: "broccoli"
+```
+
+At a **race venue**, change `ssid` / `password` to the race AP (e.g. Nuclear Hazard: `Whoop Racing` / `tinywhoop`) and reflash, or use the fallback captive portal on race day.
+
 ### WiFi behavior
 
 | Mode | When | SSID |
 |------|------|------|
-| **Station** | Race network available | `Whoop Racing` |
-| **Fallback AP** | Cannot join race WiFi within `ap_timeout` | `GateStage-<esphome.name>` (e.g. `GateStage-gate-start`) |
+| **Station** | Your WiFi is available | `wifi.ssid` in `gate.yaml` |
+| **Fallback AP** | Cannot join WiFi within `ap_timeout` | `GateStage-<esphome.name>` (e.g. `GateStage-gate-start`) |
 
-Both modes use password **`tinywhoop`**. Station mode is **5 GHz only** (`band_mode: 5GHZ`) to match the Nuclear Hazard race AP (Channel 36).
+Station mode is **5 GHz only** (`band_mode: 5GHZ`). Use a 5 GHz SSID (or a race AP on Channel 36).
 
 When a gate is in fallback AP mode, connect to `GateStage-<name>` and open **`http://192.168.4.1`**. You get:
 
-- **Captive portal** — change WiFi SSID/password if the race network moved
-- **Web UI** — turn LEDs on/off, pick colors and effects (same as on race WiFi)
+- **Captive portal** — change WiFi SSID/password if the network moved
+- **Web UI** — turn LEDs on/off, pick colors and effects (same as on LAN)
 - **REST API** — the HTTP endpoints GateStage uses
 
-That is **not** full ESPHome reconfiguration: you cannot edit YAML or add new components from the browser. To change firmware (LED count, pins, effects), recompile and flash with ESPHome CLI/dashboard. GateStage will not discover the gate until it joins `Whoop Racing`.
+That is **not** full ESPHome reconfiguration: you cannot edit YAML or add new components from the browser. To change firmware (LED count, pins, effects), recompile and flash with ESPHome CLI/dashboard. GateStage will not discover the gate until it joins your LAN WiFi.
 
 ### `ap_timeout`
 
-How long the gate keeps trying **`Whoop Racing`** before it turns on the fallback hotspot. We use **`60s`** in the sample (ESPHome default is `90s`). Set `ap_timeout: 0s` if you never want automatic fallback AP.
+How long the gate keeps trying your configured WiFi before it turns on the fallback hotspot. We use **`60s`** in the sample (ESPHome default is `90s`). Set `ap_timeout: 0s` if you never want automatic fallback AP.
 
 ### API `encryption` (not needed here)
 
@@ -68,17 +101,17 @@ GateStage and the sample gate firmware share the same effect catalog in **`lib/e
 
 | Category | Effects |
 |----------|---------|
-| **Basic** | Pulse, Random, Strobe, Flicker |
-| **Strip** | Rainbow, Color Wipe, Scan, Twinkle, Random Twinkle, Fireworks, Addressable Flicker |
+| **Basic** | Pulse, Strobe |
+| **Strip** | Rainbow, Color Wipe |
 
 When GateStage runs an effect it:
 
 1. Sets runtime parameters via ESPHome **`number`** REST entities (`FX Rainbow Speed`, etc.) when supported
 2. Calls `POST /light/Gate%20LEDs/turn_on?effect=<name>`
 
-**Runtime-tunable** (REST number entities in sample YAML): Rainbow (`speed`, `width`), Scan (`move_interval`, `scan_width`), Addressable Flicker (`update_interval`, `intensity`).
+**Runtime-tunable** (REST number entities in sample YAML): Rainbow (`speed`, `width`).
 
-**YAML-only** (edit `gate.yaml` and reflash): basic effect timing/brightness, Strobe colors, Color Wipe palette, Twinkle / Random Twinkle / Fireworks parameters. The UI still shows these fields so mappings store the intended values.
+**Firmware-only** (reflash to change): Pulse timing/brightness, Strobe colors, Color Wipe palette and direction. The UI still shows these fields so mappings store the intended values.
 
 See [ESPHome light effects](https://esphome.io/components/light/index.html#light-effects) for parameter semantics.
 
@@ -101,20 +134,28 @@ POST http://192.168.4.21/light/Gate%20LEDs/turn_on?color_mode=rgb&r=255&g=0&b=0&
 POST http://192.168.4.21/light/Gate%20LEDs/turn_off
 ```
 
-Use a **DHCP reservation** on the Nuclear Hazard router per gate (recommended) so hosts stay stable.
+DHCP is fine (no static IP required). Optional **DHCP reservation** on your router per gate keeps the host stable for debugging.
 
 ---
 
 ## Flashing
 
-1. Copy `docs/examples/gate.yaml`
-2. Change `esphome.name` for each physical gate
-3. Adjust `num_leds`, `pin`, and strip `chipset` for your hardware
-4. Flash with ESPHome CLI or dashboard while on bench WiFi (or via fallback AP)
+1. `cd docs/examples`
+2. Edit `wifi:` credentials in `gate.yaml` if needed
+3. Change `esphome.name` for each physical gate (`gate-start`, `gate-finish`, …)
+4. Adjust `num_leds`, `pin`, `chipset`, or `rgb_order` if your hardware differs
+5. Flash with ESPHome CLI or dashboard (USB) or OTA after first flash
 
 ```bash
 esphome run gate.yaml
 ```
+
+### Verify with GateStage
+
+1. Start GateStage on a machine on the **same WiFi** as the gate
+2. Open **Gates** — the gate should appear within ~15 s (background mDNS scan), or run `POST /api/gates/discover`
+3. Mark **gate-start** as the start gate
+4. Use **Test** (rainbow) or **Manual** to confirm LEDs respond
 
 ---
 
@@ -126,18 +167,18 @@ Native API actions (lower latency than REST) can be added later. GateStage v1 us
 
 ## Power / wiring notes
 
-- **12V strips** — power from dedicated PSU, not from ESP
-- **Common ground** between ESP and strip PSU
-- **Data line level** — use appropriate level shifter if strip expects 5V data
-- **Inrush** — size PSU for full strip brightness; brownouts reboot ESP
+- **12 V strips** — power from dedicated PSU, not from the XIAO
+- **Common ground** between XIAO GND and strip PSU negative
+- **Data only from ESP** — XIAO D8 → strip DATA IN; 12 V to strip separately
+- **Data line level** — many WS2811 12 V modules accept 3.3 V data; use a level shifter if your strip is flaky
+- **Inrush** — size PSU for full strip brightness; brownouts on the strip PSU do not need to reset the ESP if logic is powered separately
 
 ---
 
 ## Gate inventory (fill in per venue)
 
-| Gate ID (`esphome.name`) | Host (DHCP / reservation) | Start gate? | LED count | Notes |
-|--------------------------|---------------------------|-------------|-----------|-------|
-| gate-start | TBD | yes | TBD | |
-| gate-finish | TBD | no | TBD | |
+| Gate ID (`esphome.name`) | Host (DHCP) | Start gate? | LED count | Board | Notes |
+|--------------------------|-------------|-------------|-----------|-------|-------|
+| gate-start | (auto / mDNS) | yes | 60 | XIAO ESP32-C5 | WS2811, D8 |
 
 GateStage picks up discovered gates automatically; mark the start gate in the Gates UI.

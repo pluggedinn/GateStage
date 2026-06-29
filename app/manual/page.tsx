@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
-import { defaultEffectParams } from "@/lib/effects";
+import { defaultEffectSelection } from "@/lib/effects";
 import type { Gate } from "@/lib/config/schema";
 import { cn } from "@/lib/utils";
 
@@ -73,10 +73,9 @@ export default function ManualPage() {
     DEFAULT_BRIGHTNESS_PERCENT,
   );
   const [mode, setMode] = useState<LedPreviewMode>("effect");
-  const [effect, setEffect] = useState<EffectSelection>({
-    effectId: "addressable_rainbow",
-    params: defaultEffectParams("addressable_rainbow"),
-  });
+  const [effect, setEffect] = useState<EffectSelection>(
+    defaultEffectSelection("addressable_rainbow"),
+  );
   const [rgb, setRgb] = useState({ r: 255, g: 0, b: 0 });
 
   const gateItems = useMemo(
@@ -274,6 +273,13 @@ export default function ManualPage() {
                         effectId: effect.effectId,
                         params: effect.params,
                         brightnessPercent,
+                        ...(effect.r !== undefined &&
+                          effect.g !== undefined &&
+                          effect.b !== undefined && {
+                            r: effect.r,
+                            g: effect.g,
+                            b: effect.b,
+                          }),
                       })
                     }
                   >
@@ -332,7 +338,15 @@ export default function ManualPage() {
           <LedStripPreview
             mode={mode}
             brightnessPercent={brightnessPercent}
-            rgb={rgb}
+            rgb={
+              mode === "solid"
+                ? rgb
+                : effect.r !== undefined &&
+                    effect.g !== undefined &&
+                    effect.b !== undefined
+                  ? { r: effect.r, g: effect.g, b: effect.b }
+                  : rgb
+            }
             effectId={effect.effectId}
             gateId={selectedGateId || undefined}
             data-testid="led-strip-preview"

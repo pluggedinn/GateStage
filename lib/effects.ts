@@ -1,5 +1,5 @@
 /**
- * ESPHome built-in light effects for addressable LED strips.
+ * ESPHome light effects supported by GateStage gate firmware.
  * @see https://esphome.io/components/light/index.html#light-effects
  */
 
@@ -18,7 +18,7 @@ export type EffectParamDef = {
   max?: number;
   step?: number;
   default: number | boolean;
-  /** ESPHome REST entity; omitted when the value is fixed in gate YAML */
+  /** ESPHome REST entity; omitted when not exposed on the device */
   entityName?: string;
   yamlOnly?: boolean;
 };
@@ -30,6 +30,8 @@ export type EffectDef = {
   category: "basic" | "strip";
   description: string;
   params: EffectParamDef[];
+  /** When true, UI offers an RGB color sent with turn_on */
+  supportsColor?: boolean;
 };
 
 export const EFFECT_CATALOG: EffectDef[] = [
@@ -38,6 +40,7 @@ export const EFFECT_CATALOG: EffectDef[] = [
     name: "Pulse",
     category: "basic",
     description: "Smooth brightness pulse across the whole strip",
+    supportsColor: true,
     params: [
       {
         key: "transition_length_ms",
@@ -82,64 +85,35 @@ export const EFFECT_CATALOG: EffectDef[] = [
     ],
   },
   {
-    id: "random",
-    name: "Random",
-    category: "basic",
-    description: "Random colors at fixed intervals",
-    params: [
-      {
-        key: "transition_length_ms",
-        label: "Transition",
-        type: "milliseconds",
-        min: 100,
-        max: 30_000,
-        step: 100,
-        default: 5000,
-        yamlOnly: true,
-      },
-      {
-        key: "update_interval_ms",
-        label: "Update interval",
-        type: "milliseconds",
-        min: 100,
-        max: 60_000,
-        step: 100,
-        default: 7000,
-        yamlOnly: true,
-      },
-    ],
-  },
-  {
     id: "strobe",
     name: "Strobe",
     category: "basic",
-    description: "Cycle through configured colors (colors defined in gate YAML)",
+    description: "Flash on and off in a chosen color",
+    supportsColor: true,
     params: [],
   },
   {
-    id: "flicker",
-    name: "Flicker",
-    category: "basic",
-    description: "Candle-like brightness variation on the whole strip",
+    id: "addressable_color_wipe",
+    name: "Color Wipe",
+    category: "strip",
+    description: "Sweep a chosen color along the strip",
+    supportsColor: true,
     params: [
       {
-        key: "alpha",
-        label: "Alpha (smoothing)",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 1,
-        default: 95,
+        key: "add_led_interval_ms",
+        label: "LED shift interval",
+        type: "milliseconds",
+        min: 10,
+        max: 5000,
+        step: 10,
+        default: 100,
         yamlOnly: true,
       },
       {
-        key: "intensity",
-        label: "Intensity",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 0.1,
-        default: 1.5,
+        key: "reverse",
+        label: "Reverse direction",
+        type: "bool",
+        default: false,
         yamlOnly: true,
       },
     ],
@@ -172,193 +146,35 @@ export const EFFECT_CATALOG: EffectDef[] = [
       },
     ],
   },
-  {
-    id: "addressable_color_wipe",
-    name: "Color Wipe",
-    category: "strip",
-    description: "New colors shift in at the start of the strip",
-    params: [
-      {
-        key: "add_led_interval_ms",
-        label: "LED shift interval",
-        type: "milliseconds",
-        min: 10,
-        max: 5000,
-        step: 10,
-        default: 100,
-        yamlOnly: true,
-      },
-      {
-        key: "reverse",
-        label: "Reverse direction",
-        type: "bool",
-        default: false,
-        yamlOnly: true,
-      },
-    ],
-  },
-  {
-    id: "addressable_scan",
-    name: "Scan",
-    category: "strip",
-    description: "Single dot slides back and forth (uses base color)",
-    params: [
-      {
-        key: "move_interval_ms",
-        label: "Move interval",
-        type: "milliseconds",
-        min: 10,
-        max: 5000,
-        step: 10,
-        default: 100,
-        entityName: "FX Scan Interval",
-      },
-      {
-        key: "scan_width",
-        label: "Scan width (LEDs)",
-        type: "int",
-        min: 1,
-        max: 60,
-        step: 1,
-        default: 1,
-        entityName: "FX Scan Width",
-      },
-    ],
-  },
-  {
-    id: "addressable_twinkle",
-    name: "Twinkle",
-    category: "strip",
-    description: "Random pixels brighten and fade (uses base color)",
-    params: [
-      {
-        key: "twinkle_probability",
-        label: "Twinkle probability",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 0.1,
-        default: 5,
-        yamlOnly: true,
-      },
-      {
-        key: "progress_interval_ms",
-        label: "Progress interval",
-        type: "milliseconds",
-        min: 1,
-        max: 100,
-        step: 1,
-        default: 4,
-        yamlOnly: true,
-      },
-    ],
-  },
-  {
-    id: "addressable_random_twinkle",
-    name: "Random Twinkle",
-    category: "strip",
-    description: "Twinkle with a random color per pixel",
-    params: [
-      {
-        key: "twinkle_probability",
-        label: "Twinkle probability",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 0.1,
-        default: 5,
-        yamlOnly: true,
-      },
-      {
-        key: "progress_interval_ms",
-        label: "Progress interval",
-        type: "milliseconds",
-        min: 1,
-        max: 100,
-        step: 1,
-        default: 32,
-        yamlOnly: true,
-      },
-    ],
-  },
-  {
-    id: "addressable_fireworks",
-    name: "Fireworks",
-    category: "strip",
-    description: "Sparks burst from random pixels and cascade",
-    params: [
-      {
-        key: "update_interval_ms",
-        label: "Update interval",
-        type: "milliseconds",
-        min: 1,
-        max: 200,
-        step: 1,
-        default: 32,
-        yamlOnly: true,
-      },
-      {
-        key: "spark_probability",
-        label: "Spark probability",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 0.1,
-        default: 10,
-        yamlOnly: true,
-      },
-      {
-        key: "use_random_color",
-        label: "Random spark colors",
-        type: "bool",
-        default: false,
-        yamlOnly: true,
-      },
-      {
-        key: "fade_out_rate",
-        label: "Fade out rate",
-        type: "int",
-        min: 1,
-        max: 255,
-        step: 1,
-        default: 120,
-        yamlOnly: true,
-      },
-    ],
-  },
-  {
-    id: "addressable_flicker",
-    name: "Addressable Flicker",
-    category: "strip",
-    description: "Per-pixel flicker around the base color",
-    params: [
-      {
-        key: "update_interval_ms",
-        label: "Update interval",
-        type: "milliseconds",
-        min: 1,
-        max: 200,
-        step: 1,
-        default: 16,
-        entityName: "FX Strip Flicker Interval",
-      },
-      {
-        key: "intensity",
-        label: "Intensity",
-        type: "percent",
-        min: 0,
-        max: 100,
-        step: 0.1,
-        default: 5,
-        entityName: "FX Strip Flicker Intensity",
-      },
-    ],
-  },
 ];
 
 export const EFFECT_BY_ID = new Map(EFFECT_CATALOG.map((e) => [e.id, e]));
 
 export const EFFECT_BY_NAME = new Map(EFFECT_CATALOG.map((e) => [e.name, e]));
+
+export type EffectSelection = {
+  effectId: string;
+  params: Record<string, number | boolean>;
+  r?: number;
+  g?: number;
+  b?: number;
+};
+
+export const DEFAULT_EFFECT_COLOR = { r: 255, g: 255, b: 255 } as const;
+
+export function defaultEffectSelection(effectId: string): EffectSelection {
+  const effect = EFFECT_BY_ID.get(effectId);
+  const selection: EffectSelection = {
+    effectId,
+    params: defaultEffectParams(effectId),
+  };
+  if (effect?.supportsColor) {
+    selection.r = DEFAULT_EFFECT_COLOR.r;
+    selection.g = DEFAULT_EFFECT_COLOR.g;
+    selection.b = DEFAULT_EFFECT_COLOR.b;
+  }
+  return selection;
+}
 
 export function resolveEffectId(effectId?: string, legacyName?: string): string {
   if (effectId && EFFECT_BY_ID.has(effectId)) return effectId;

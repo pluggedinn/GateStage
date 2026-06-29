@@ -76,7 +76,10 @@ export async function sendEsphomeCommand(
 
   if (command.kind === "off") {
     const url = `${base}/light/${entitySeg}/turn_off`;
-    return fetch(url, { method: "POST" });
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Length": "0" },
+    });
   }
 
   if (command.kind === "effect") {
@@ -97,24 +100,36 @@ export async function sendEsphomeCommand(
     const q = new URLSearchParams({
       effect: effect.name,
       brightness: String(resolveEsphomeBrightness(command.brightnessPercent)),
+      transition: "0",
     });
-    if (command.r !== undefined) q.set("r", String(command.r));
-    if (command.g !== undefined) q.set("g", String(command.g));
-    if (command.b !== undefined) q.set("b", String(command.b));
+    if (command.r !== undefined) {
+      q.set("color_mode", "rgb");
+      q.set("r", String(command.r));
+      q.set("g", String(command.g));
+      q.set("b", String(command.b));
+    }
 
     const url = `${base}/light/${entitySeg}/turn_on?${q}`;
-    return fetch(url, { method: "POST" });
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Length": "0" },
+    });
   }
 
   const q = new URLSearchParams({
+    effect: "None",
     color_mode: "rgb",
     r: String(command.r),
     g: String(command.g),
     b: String(command.b),
     brightness: String(resolveEsphomeBrightness(command.brightnessPercent)),
+    transition: "0",
   });
   const url = `${base}/light/${entitySeg}/turn_on?${q}`;
-  return fetch(url, { method: "POST" });
+  return fetch(url, {
+    method: "POST",
+    headers: { "Content-Length": "0" },
+  });
 }
 
 export async function pingGate(host: string): Promise<boolean> {

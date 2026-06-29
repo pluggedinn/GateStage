@@ -1,4 +1,9 @@
 import { Bonjour, type Service } from "bonjour-service";
+import {
+  mergeDiscoveredGates,
+  type MergeDiscoveryResult,
+} from "@/lib/config/store";
+import { esphomeMockFleetHosts } from "@/lib/dev/esphome-mock-fleet";
 import { pingGate } from "@/lib/esphome";
 
 export type DiscoveredGate = {
@@ -32,6 +37,13 @@ function serviceToGate(service: Service): DiscoveredGate | null {
 
 function gatesFromEnv(): DiscoveredGate[] {
   const gates: DiscoveredGate[] = [];
+
+  if (process.env.ESPHOME_MOCK_FLEET === "1") {
+    for (const gate of esphomeMockFleetHosts()) {
+      gates.push({ ...gate, source: "env" });
+    }
+    return gates;
+  }
 
   const mockHost = process.env.ESPHOME_MOCK_HOST;
   if (mockHost) {
@@ -74,9 +86,7 @@ async function verifyDiscovered(
   return verified.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-export async function discoverGates(
-  timeoutMs = DEFAULT_SCAN_MS,
-): Promise<DiscoveredGate[]> {
+async function discoverGates(timeoutMs = DEFAULT_SCAN_MS): Promise<DiscoveredGate[]> {
   const candidates = new Map<string, DiscoveredGate>();
 
   for (const gate of gatesFromEnv()) {
@@ -102,4 +112,11 @@ export async function discoverGates(
   });
 
   return verifyDiscovered(candidates);
+}
+
+export async function syncGatesFromNetwork(
+  timeoutMs?: number,
+): Promise<MergeDiscoveryResult> {
+  const discovered = await discoverGates(timeoutMs);
+  return mergeDiscoveredGates(discovered);
 }

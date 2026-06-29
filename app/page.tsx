@@ -229,7 +229,7 @@ export default function DashboardPage() {
             <ScrollArea className="h-80 pr-4">
               {actions.length === 0 ? (
                 <p className="text-base text-muted-foreground">
-                  Gate commands appear here when events trigger mappings.
+                  Gate commands appear here when events trigger routines.
                 </p>
               ) : (
                 <>

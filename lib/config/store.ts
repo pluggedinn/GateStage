@@ -1,11 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import {
-  type Config,
-  type EventMapping,
-  type Gate,
-  configSchema,
-} from "./schema";
+import { type Config, type EventSequence, type Gate, configSchema } from "./schema";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath =
@@ -13,57 +8,47 @@ const configPath =
 const configTmpPath = `${configPath}.tmp`;
 
 let cached: Config | null = null;
+let cachedMtimeMs: number | null = null;
+
+function configMtimeMs(): number | null {
+  try {
+    return fs.statSync(configPath).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/** Always prefer disk when it changed — avoids stale module caches overwriting sequences. */
+function loadConfigFromDisk(): Config {
+  if (!fs.existsSync(configPath)) {
+    const seeded = defaultConfig();
+    writeConfigFile(seeded);
+    cached = seeded;
+    cachedMtimeMs = configMtimeMs();
+    return seeded;
+  }
+
+  const mtimeMs = configMtimeMs();
+  if (cached && cachedMtimeMs === mtimeMs) {
+    return cached;
+  }
+
+  const raw = fs.readFileSync(configPath, "utf8");
+  const parsed = configSchema.parse(JSON.parse(raw));
+  cached = parsed;
+  cachedMtimeMs = mtimeMs;
+  return parsed;
+}
 
 function defaultConfig(): Config {
   const nextWsUrl =
     process.env.NEXT_WS_URL ?? "ws://127.0.0.1:9400";
 
   return {
-    version: 1,
+    version: 2,
     settings: { nextWsUrl, defaultBrightnessPercent: 5 },
     gates: [],
-    mappings: [
-      {
-        id: "map-heat-loaded",
-        eventType: "heat.loaded",
-        target: "start_gate",
-        targetGateId: null,
-        action: { kind: "pilot_color" },
-        enabled: true,
-      },
-      {
-        id: "map-arm-started",
-        eventType: "heat.arm_started",
-        target: "start_gate",
-        targetGateId: null,
-        action: { kind: "effect", effectId: "pulse" },
-        enabled: true,
-      },
-      {
-        id: "map-heat-go",
-        eventType: "heat.go",
-        target: "all",
-        targetGateId: null,
-        action: { kind: "solid", r: 0, g: 255, b: 0 },
-        enabled: true,
-      },
-      {
-        id: "map-heat-finished",
-        eventType: "heat.finished",
-        target: "all",
-        targetGateId: null,
-        action: { kind: "solid", r: 255, g: 0, b: 0 },
-        enabled: true,
-      },
-      {
-        id: "map-pilot-crossing",
-        eventType: "pilot.crossing",
-        target: "start_gate",
-        targetGateId: null,
-        action: { kind: "pilot_color" },
-        enabled: true,
-      },
-    ],
+    sequences: [],
   };
 }
 
@@ -78,35 +63,25 @@ function writeConfigFile(config: Config) {
 }
 
 export function initConfig(): Config {
-  if (cached) return cached;
-
-  if (!fs.existsSync(configPath)) {
-    const seeded = defaultConfig();
-    writeConfigFile(seeded);
-    cached = seeded;
-    return cached;
-  }
-
-  const raw = fs.readFileSync(configPath, "utf8");
-  const parsed = configSchema.parse(JSON.parse(raw));
-  cached = parsed;
-  return cached;
+  return loadConfigFromDisk();
 }
 
 export function getConfig(): Config {
-  return cached ?? initConfig();
+  return loadConfigFromDisk();
 }
 
 export function reloadConfig(): Config {
   cached = null;
-  return initConfig();
+  cachedMtimeMs = null;
+  return loadConfigFromDisk();
 }
 
 export function saveConfig(mutator: (config: Config) => Config): Config {
-  const current = getConfig();
+  const current = loadConfigFromDisk();
   const next = configSchema.parse(mutator(structuredClone(current)));
   writeConfigFile(next);
   cached = next;
+  cachedMtimeMs = configMtimeMs();
   return next;
 }
 
@@ -118,8 +93,12 @@ export function getGate(id: string): Gate | undefined {
   return getConfig().gates.find((g) => g.id === id);
 }
 
-export function getMappings(): EventMapping[] {
-  return getConfig().mappings;
+export function getSequences(): EventSequence[] {
+  return getConfig().sequences;
+}
+
+export function getSequence(eventType: string): EventSequence | undefined {
+  return getConfig().sequences.find((s) => s.eventType === eventType);
 }
 
 export function getSetting<K extends keyof Config["settings"]>(
@@ -146,6 +125,7 @@ export type MergeDiscoveryResult = {
   discovered: DiscoveredGateSummary[];
   added: string[];
   updated: string[];
+  removed: string[];
   gates: Gate[];
 };
 
@@ -158,31 +138,36 @@ export type DiscoveredGateSummary = {
 export function mergeDiscoveredGates(
   discovered: DiscoveredGateSummary[],
 ): MergeDiscoveryResult {
+  const previous = getGates();
+  const discoveredIds = new Set(discovered.map((d) => d.id));
   const added: string[] = [];
   const updated: string[] = [];
+  const removed = previous
+    .filter((g) => !discoveredIds.has(g.id))
+    .map((g) => g.id);
 
   saveConfig((config) => {
-    const gates = [...config.gates];
-
-    for (const item of discovered) {
-      const idx = gates.findIndex((g) => g.id === item.id);
-      if (idx >= 0) {
-        if (gates[idx].host !== item.host) {
-          gates[idx] = { ...gates[idx], host: item.host };
-          updated.push(item.id);
-        }
-        continue;
+    let gates: Gate[] = discovered.map((item, sortOrder) => {
+      const existing = previous.find((g) => g.id === item.id);
+      if (existing) {
+        if (existing.host !== item.host) updated.push(item.id);
+        return { ...existing, host: item.host, sortOrder };
       }
 
-      const shouldBeStart = !gates.some((g) => g.isStartGate);
-      gates.push({
+      added.push(item.id);
+      return {
         id: item.id,
         host: item.host,
-        isStartGate: shouldBeStart,
+        isStartGate: false,
         enabled: true,
-        sortOrder: gates.length,
-      });
-      added.push(item.id);
+        sortOrder,
+      };
+    });
+
+    if (gates.length > 0 && !gates.some((g) => g.isStartGate)) {
+      gates = gates.map((g, i) =>
+        i === 0 ? { ...g, isStartGate: true } : g,
+      );
     }
 
     return { ...config, gates };
@@ -192,6 +177,7 @@ export function mergeDiscoveredGates(
     discovered,
     added,
     updated,
+    removed,
     gates: getGates(),
   };
 }

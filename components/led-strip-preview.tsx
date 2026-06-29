@@ -17,60 +17,38 @@ type LedStripPreviewProps = {
 };
 
 function effectAnimationClass(effectId: string): string {
-  if (
-    effectId === "addressable_rainbow" ||
-    effectId === "random" ||
-    effectId === "addressable_fireworks"
-  ) {
+  if (effectId === "addressable_rainbow") {
     return "led-animate-rainbow";
   }
-  if (effectId === "pulse" || effectId === "addressable_twinkle") {
+  if (effectId === "pulse") {
     return "led-animate-pulse";
   }
-  if (
-    effectId === "strobe" ||
-    effectId === "flicker" ||
-    effectId === "addressable_flicker" ||
-    effectId === "addressable_random_twinkle"
-  ) {
+  if (effectId === "strobe") {
     return "led-animate-strobe";
   }
-  if (
-    effectId === "addressable_color_wipe" ||
-    effectId === "addressable_scan"
-  ) {
+  if (effectId === "addressable_color_wipe") {
     return "led-animate-scan";
   }
   return "led-animate-pulse";
 }
 
-function effectBackground(effectId: string, brightnessPercent: number): string {
-  if (
-    effectId === "addressable_rainbow" ||
-    effectId === "random" ||
-    effectId === "addressable_fireworks"
-  ) {
+function effectBackground(
+  effectId: string,
+  brightnessPercent: number,
+  rgb: Rgb,
+): string {
+  if (effectId === "addressable_rainbow") {
     return "linear-gradient(90deg, oklch(0.55 0.2 25), oklch(0.55 0.2 85), oklch(0.55 0.2 155), oklch(0.55 0.2 250), oklch(0.55 0.2 25))";
   }
-  if (
-    effectId === "addressable_color_wipe" ||
-    effectId === "addressable_scan"
-  ) {
-    const accent = rgbToHex(
-      applyBrightnessToRgb({ r: 0, g: 255, b: 80 }, brightnessPercent),
-    );
+  if (effectId === "addressable_color_wipe") {
+    const accent = rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent));
     return `linear-gradient(90deg, oklch(0.12 0 0) 0%, oklch(0.12 0 0) 40%, ${accent} 50%, oklch(0.12 0 0) 60%, oklch(0.12 0 0) 100%)`;
   }
-  return rgbToHex(
-    applyBrightnessToRgb({ r: 255, g: 220, b: 180 }, brightnessPercent),
-  );
+  return rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent));
 }
 
 function effectOpacity(effectId: string, brightnessPercent: number): number {
-  if (
-    effectId === "addressable_color_wipe" ||
-    effectId === "addressable_scan"
-  ) {
+  if (effectId === "addressable_color_wipe") {
     return 1;
   }
   return Math.max(0.2, brightnessPercent / 100);
@@ -105,12 +83,9 @@ export function LedStripPreview({
             ),
           }
         : {
-            background: effectBackground(effectId, brightnessPercent),
+            background: effectBackground(effectId, brightnessPercent, rgb),
             backgroundSize:
-              effectId === "addressable_color_wipe" ||
-              effectId === "addressable_scan"
-                ? "200% 100%"
-                : undefined,
+              effectId === "addressable_color_wipe" ? "200% 100%" : undefined,
             opacity: effectOpacity(effectId, brightnessPercent),
           };
 

@@ -1,44 +1,67 @@
-# GateStage — sample ESPHome gate firmware
+# GateStage — ESPHome gate firmware (Seeed XIAO ESP32-C5)
 #
 # Flash one copy per gate. Change `esphome.name` for each device (gate-start,
 # gate-finish, etc.) — that name is the gate ID GateStage discovers via mDNS.
 #
-# Effects match `lib/effects.ts`. Strip effects Rainbow, Scan, and Addressable
-# Flicker expose REST number entities so GateStage can tune parameters at runtime.
-# Other effect parameters are set in this file (edit and reflash to change).
+# Hardware (default in this file):
+#   - Seeed XIAO ESP32-C5
+#   - WS2811 addressable strip, 60 LEDs, data on D8 (GPIO8)
+#   - 12 V strip PSU wired separately; ESP drives data only (share GND with PSU)
+#
+# Effects match `lib/effects.ts`: Pulse, Strobe, Color Wipe, Rainbow.
+# Rainbow speed/width are runtime-tunable via REST number entities.
 
 esphome:
-  name: gate-start
-  friendly_name: Start Gate
+  name: gate-1
+  friendly_name: Gate 1
+  on_boot:
+    # Restore runs in light setup(); re-apply after hardware is up (RMT strip).
+    - priority: -100
+      then:
+        - delay: 300ms
+        - light.turn_on:
+            id: gate_led
+            transition_length: 0s
 
 esp32:
   board: esp32-c5-devkitc-1
+  variant: esp32c5
+  flash_size: 8MB
   framework:
     type: esp-idf
 
 logger:
   level: INFO
+  hardware_uart: USB_SERIAL_JTAG
 
 mdns:
 
 wifi:
-  ssid: "Whoop Racing"
-  password: "tinywhoop"
+  networks:
+    - ssid: "I dont take naps-5G"
+      password: "broccoli"
+      priority: 10
+    - ssid: "Whoop Racing"
+      password: "tinywhoop"
+      priority: 5
   band_mode: 5GHZ
   fast_connect: false
   power_save_mode: none
   ap:
-    ssid: "GateStage-${esphome.name}"
+    ssid: "GateStage-gate-1"
     password: "tinywhoop"
-  ap_timeout: 60s
 
 api:
+
+ota:
+  - platform: esphome
+  - platform: web_server
 
 web_server:
   port: 80
   local: true
 
-# Runtime effect parameters (GateStage sets these via REST before turn_on)
+# Runtime Rainbow parameters (GateStage sets these via REST before turn_on)
 globals:
   - id: g_rainbow_speed
     type: int
@@ -48,22 +71,6 @@ globals:
     type: int
     restore_value: false
     initial_value: "50"
-  - id: g_scan_interval_ms
-    type: int
-    restore_value: false
-    initial_value: "100"
-  - id: g_scan_width
-    type: int
-    restore_value: false
-    initial_value: "1"
-  - id: g_strip_flicker_interval_ms
-    type: int
-    restore_value: false
-    initial_value: "16"
-  - id: g_strip_flicker_intensity
-    type: int
-    restore_value: false
-    initial_value: "5"
 
 number:
   - platform: template
@@ -88,50 +95,11 @@ number:
       - globals.set:
           id: g_rainbow_width
           value: !lambda "return (int) x;"
-  - platform: template
-    name: "FX Scan Interval"
-    optimistic: true
-    min_value: 10
-    max_value: 5000
-    step: 10
-    initial_value: 100
-    set_action:
-      - globals.set:
-          id: g_scan_interval_ms
-          value: !lambda "return (int) x;"
-  - platform: template
-    name: "FX Scan Width"
-    optimistic: true
-    min_value: 1
-    max_value: 60
-    step: 1
-    initial_value: 1
-    set_action:
-      - globals.set:
-          id: g_scan_width
-          value: !lambda "return (int) x;"
-  - platform: template
-    name: "FX Strip Flicker Interval"
-    optimistic: true
-    min_value: 1
-    max_value: 200
-    step: 1
-    initial_value: 16
-    set_action:
-      - globals.set:
-          id: g_strip_flicker_interval_ms
-          value: !lambda "return (int) x;"
-  - platform: template
-    name: "FX Strip Flicker Intensity"
-    optimistic: true
-    min_value: 0
-    max_value: 100
-    step: 0.1
-    initial_value: 5
-    set_action:
-      - globals.set:
-          id: g_strip_flicker_intensity
-          value: !lambda "return (int) x;"
+
+sensor:
+  - platform: internal_temperature
+    name: "ESP Temperature"
+    update_interval: 60s
 
 light:
   - platform: esp32_rmt_led_strip
@@ -139,20 +107,26 @@ light:
     name: "Gate LEDs"
     pin: GPIO8
     num_leds: 60
-    rgb_order: GRB
-    chipset: ws2812
+    rgb_order: RGB
+    chipset: ws2811
+    use_psram: false
+    rmt_symbols: 96
+    default_transition_length: 0s
+    restore_mode: RESTORE_AND_ON
+    initial_state:
+      state: true
+      brightness: 5%
+      color_mode: rgb
+      red: 100%
+      green: 0%
+      blue: 0%
     effects:
-      # --- Basic (whole-strip) ---
       - pulse:
           name: Pulse
           transition_length: 1s
           update_interval: 1s
           min_brightness: 0%
           max_brightness: 100%
-      - random:
-          name: Random
-          transition_length: 5s
-          update_interval: 7s
       - strobe:
           name: Strobe
           colors:
@@ -170,12 +144,6 @@ light:
               green: 0%
               blue: 0%
               duration: 500ms
-      - flicker:
-          name: Flicker
-          alpha: 95%
-          intensity: 1.5%
-
-      # --- Strip (addressable) — runtime-tunable via globals ---
       - addressable_lambda:
           name: Rainbow
           update_interval: 16ms
@@ -187,58 +155,13 @@ light:
             if (size == 0) return;
             for (int i = 0; i < size; i++) {
               float hue = fmodf((tick * speed * 6.0f / width) + (i * 360.0f / width), 360.0f);
-              it[i] = Color::from_hsv(hue, 1.0f, 1.0f);
+              esphome::light::ESPHSVColor hsv;
+              hsv.hue = (uint8_t) (hue * 255.0f / 360.0f);
+              hsv.saturation = 255;
+              hsv.value = 255;
+              it[i] = hsv;
             }
             tick++;
-      - addressable_lambda:
-          name: Scan
-          update_interval: 16ms
-          lambda: |-
-            static int pos = 0;
-            static int dir = 1;
-            static uint32_t last_move = 0;
-            const int interval = id(g_scan_interval_ms);
-            const int scan_width = id(g_scan_width);
-            const int size = it.size();
-            if (size == 0) return;
-            const uint32_t now = millis();
-            if (now - last_move >= (uint32_t) interval) {
-              pos += dir;
-              if (pos >= size - scan_width) { pos = size - scan_width; dir = -1; }
-              if (pos <= 0) { pos = 0; dir = 1; }
-              last_move = now;
-            }
-            auto base = current_color;
-            it.all() = Color(0, 0, 0);
-            for (int i = 0; i < scan_width; i++) {
-              int idx = pos + i;
-              if (idx >= 0 && idx < size) it[idx] = base;
-            }
-      - addressable_lambda:
-          name: Addressable Flicker
-          update_interval: 16ms
-          lambda: |-
-            static uint32_t last = 0;
-            const int interval = id(g_strip_flicker_interval_ms);
-            const int intensity = id(g_strip_flicker_intensity);
-            const uint32_t now = millis();
-            if (now - last < (uint32_t) interval) return;
-            last = now;
-            auto base = current_color;
-            const int size = it.size();
-            for (int i = 0; i < size; i++) {
-              float jitter = (random_uint32() % (intensity * 2 + 1)) - intensity;
-              float scale = 1.0f + (jitter / 100.0f);
-              if (scale < 0.0f) scale = 0.0f;
-              if (scale > 1.0f) scale = 1.0f;
-              it[i] = Color(
-                (uint8_t) (base.get_red() * scale),
-                (uint8_t) (base.get_green() * scale),
-                (uint8_t) (base.get_blue() * scale)
-              );
-            }
-
-      # --- Strip (addressable) — parameters fixed in YAML; reflash to change ---
       - addressable_color_wipe:
           name: Color Wipe
           colors:
@@ -253,17 +176,3 @@ light:
               num_leds: 1
           add_led_interval: 100ms
           reverse: false
-      - addressable_twinkle:
-          name: Twinkle
-          twinkle_probability: 5%
-          progress_interval: 4ms
-      - addressable_random_twinkle:
-          name: Random Twinkle
-          twinkle_probability: 5%
-          progress_interval: 32ms
-      - addressable_fireworks:
-          name: Fireworks
-          update_interval: 32ms
-          spark_probability: 10%
-          use_random_color: false
-          fade_out_rate: 120
