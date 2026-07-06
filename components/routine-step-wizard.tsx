@@ -2,11 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrightnessControl } from "@/components/brightness-control";
-import { ColorPicker } from "@/components/color-picker";
-import {
-  EffectPicker,
-  type EffectSelection,
-} from "@/components/effect-picker";
+import { ColorSourcePicker } from "@/components/color-source-picker";
+import { EffectPicker, type EffectSelection } from "@/components/effect-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -25,9 +22,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  CHOREOGRAPHY_EASING_OPTIONS,
+  choreographyIdFromActionKind,
+  defaultChoreographyParams,
+  getChoreographyWizardOptions,
+  isChoreographyActionKind,
+} from "@/lib/choreography";
+import {
+  type ColorSource,
+  eventSupportsPilotColor,
+} from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
-import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
-import { defaultEffectSelection } from "@/lib/effects";
+import { defaultEffectSelection, EFFECT_BY_ID } from "@/lib/effects";
 import { getRaceEventDef, type RaceEventType } from "@/lib/race-events";
 import type { MappingAction, SequenceStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,17 +43,12 @@ const ACTION_KINDS = [
   {
     id: "effect",
     label: "Effect",
-    description: "Run an ESPHome light effect on the strip",
+    description: "Run a light effect on the strip",
   },
   {
     id: "solid",
     label: "Solid color",
     description: "Set a fixed RGB color",
-  },
-  {
-    id: "pilot_color",
-    label: "Pilot color",
-    description: "Use the crossing pilot's assigned color",
   },
   {
     id: "off",
@@ -55,7 +57,10 @@ const ACTION_KINDS = [
   },
 ] as const;
 
-type ActionKind = (typeof ACTION_KINDS)[number]["id"];
+const CHOREOGRAPHY_ACTION_KINDS = getChoreographyWizardOptions();
+
+type StandardActionKind = (typeof ACTION_KINDS)[number]["id"];
+type ActionKind = StandardActionKind | `choreography:${string}`;
 type StepKind = "action" | "delay";
 
 type RoutineStepWizardProps = {
@@ -85,10 +90,31 @@ export function RoutineStepWizard({
     defaultEffectSelection("pulse"),
   );
   const [rgb, setRgb] = useState({ r: 0, g: 255, b: 0 });
+  const [colorSource, setColorSource] = useState<ColorSource>("fixed");
+  const showPilotColorOption = eventSupportsPilotColor(eventType);
   const [brightnessPercent, setBrightnessPercent] = useState(
     defaultBrightnessPercent,
   );
+  const [tunnelDurationSeconds, setTunnelDurationSeconds] = useState("3");
+  const [tunnelEasing, setTunnelEasing] = useState("easeInQuad");
   const [submitting, setSubmitting] = useState(false);
+
+  const availableActionKinds = useMemo(() => {
+    const standard = ACTION_KINDS.map((kind) => ({
+      id: kind.id as ActionKind,
+      label: kind.label,
+      description: kind.description,
+    }));
+    const choreographies =
+      target === "all"
+        ? CHOREOGRAPHY_ACTION_KINDS.map((kind) => ({
+            id: kind.actionKind,
+            label: kind.label,
+            description: kind.description,
+          }))
+        : [];
+    return [...standard, ...choreographies];
+  }, [target]);
 
   const stepLabels = useMemo(() => {
     if (stepKind === "delay") return ["Type", "Wait"];
@@ -114,31 +140,84 @@ export function RoutineStepWizard({
     setActionKind("solid");
     setEffect(defaultEffectSelection("pulse"));
     setRgb({ r: 0, g: 255, b: 0 });
+    setColorSource("fixed");
     setBrightnessPercent(defaultBrightnessPercent);
+    setTunnelDurationSeconds("3");
+    setTunnelEasing("easeInQuad");
     setSubmitting(false);
   }, [open, eventType, defaultBrightnessPercent]);
 
+  useEffect(() => {
+    if (target !== "all" && isChoreographyActionKind(actionKind)) {
+      setActionKind("solid");
+    }
+  }, [target, actionKind]);
+
+  useEffect(() => {
+    if (!showPilotColorOption && colorSource === "pilot") {
+      setColorSource("fixed");
+    }
+  }, [showPilotColorOption, colorSource]);
+
   function buildAction(): MappingAction {
-    if (actionKind === "effect") {
+    if (isChoreographyActionKind(actionKind)) {
+      const choreographyId = choreographyIdFromActionKind(actionKind);
+      if (choreographyId === "tunnel") {
+        const seconds = Number(tunnelDurationSeconds);
+        return {
+          kind: "choreography",
+          choreographyId: "tunnel",
+          params: {
+            colorSource,
+            ...(colorSource === "fixed" ? rgb : {}),
+            brightnessPercent,
+            durationMs: Math.round(seconds * 1000),
+            easing: tunnelEasing,
+          },
+        };
+      }
       return {
-        kind: "effect",
+        kind: "choreography",
+        choreographyId,
+        params: defaultChoreographyParams(choreographyId),
+      };
+    }
+    if (actionKind === "effect") {
+      const effectDef = EFFECT_BY_ID.get(effect.effectId);
+      const base = {
+        kind: "effect" as const,
         effectId: effect.effectId,
         params: effect.params,
         brightnessPercent,
-        ...(effect.r !== undefined &&
-          effect.g !== undefined &&
-          effect.b !== undefined && {
-            r: effect.r,
-            g: effect.g,
-            b: effect.b,
-          }),
       };
+      if (effectDef?.supportsColor) {
+        if (colorSource === "pilot" && showPilotColorOption) {
+          return { ...base, colorSource: "pilot" as const };
+        }
+        return {
+          ...base,
+          colorSource: "fixed" as const,
+          ...(effect.r !== undefined &&
+            effect.g !== undefined &&
+            effect.b !== undefined && {
+              r: effect.r,
+              g: effect.g,
+              b: effect.b,
+            }),
+        };
+      }
+      return base;
     }
     if (actionKind === "solid") {
-      return { kind: "solid", ...rgb, brightnessPercent };
-    }
-    if (actionKind === "pilot_color") {
-      return { kind: "pilot_color", brightnessPercent };
+      if (colorSource === "pilot" && showPilotColorOption) {
+        return { kind: "solid", colorSource: "pilot", brightnessPercent };
+      }
+      return {
+        kind: "solid",
+        colorSource: "fixed",
+        ...rgb,
+        brightnessPercent,
+      };
     }
     return { kind: "off" };
   }
@@ -165,8 +244,7 @@ export function RoutineStepWizard({
     } as Omit<SequenceStep, "id">;
   }
 
-  const isLastStep =
-    stepKind === "delay" ? wizardStep === 1 : wizardStep === 3;
+  const isLastStep = stepKind === "delay" ? wizardStep === 1 : wizardStep === 3;
 
   function canContinue(): boolean {
     if (wizardStep === 0) return stepKind !== null;
@@ -176,6 +254,13 @@ export function RoutineStepWizard({
     }
     if (wizardStep === 1) return Boolean(target);
     if (wizardStep === 2) return Boolean(actionKind);
+    if (
+      isChoreographyActionKind(actionKind) &&
+      actionKind === "choreography:tunnel"
+    ) {
+      const seconds = Number(tunnelDurationSeconds);
+      return Number.isFinite(seconds) && seconds > 0;
+    }
     return true;
   }
 
@@ -310,7 +395,7 @@ export function RoutineStepWizard({
           {wizardStep === 2 && stepKind === "action" && (
             <div className="grid gap-2">
               <Label>What should the gates do?</Label>
-              {ACTION_KINDS.map((kind) => (
+              {availableActionKinds.map((kind) => (
                 <button
                   key={kind.id}
                   type="button"
@@ -331,25 +416,96 @@ export function RoutineStepWizard({
             </div>
           )}
 
-          {wizardStep === 3 && stepKind === "action" && actionKind === "off" && (
-            <p className="text-sm text-muted-foreground">
-              Gates will turn off when this step runs.
-            </p>
-          )}
+          {wizardStep === 3 &&
+            stepKind === "action" &&
+            actionKind === "choreography:tunnel" && (
+              <div className="space-y-4">
+                <ColorSourcePicker
+                  label="Color"
+                  showPilotOption={showPilotColorOption}
+                  colorSource={colorSource}
+                  onColorSourceChange={setColorSource}
+                  rgb={rgb}
+                  onRgbChange={setRgb}
+                />
+                <BrightnessControl
+                  value={brightnessPercent}
+                  onChange={setBrightnessPercent}
+                />
+                <div className="space-y-2">
+                  <Label htmlFor="tunnel-duration">Duration (seconds)</Label>
+                  <Input
+                    id="tunnel-duration"
+                    type="number"
+                    min={0.1}
+                    step={0.1}
+                    value={tunnelDurationSeconds}
+                    onChange={(e) => setTunnelDurationSeconds(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="tunnel-easing">Acceleration</Label>
+                  <Select
+                    value={tunnelEasing}
+                    onValueChange={(v) => v && setTunnelEasing(v)}
+                    items={CHOREOGRAPHY_EASING_OPTIONS.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                    }))}
+                  >
+                    <SelectTrigger id="tunnel-easing">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CHOREOGRAPHY_EASING_OPTIONS.map((o) => (
+                        <SelectItem key={o.value} value={o.value}>
+                          {o.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
 
-          {wizardStep === 3 && stepKind === "action" && actionKind === "effect" && (
-            <EffectPicker value={effect} onChange={setEffect} />
-          )}
+          {wizardStep === 3 &&
+            stepKind === "action" &&
+            actionKind === "off" && (
+              <p className="text-sm text-muted-foreground">
+                Gates will turn off when this step runs.
+              </p>
+            )}
 
-          {wizardStep === 3 && stepKind === "action" && actionKind === "solid" && (
-            <ColorPicker value={rgb} onChange={setRgb} label="Color" />
-          )}
+          {wizardStep === 3 &&
+            stepKind === "action" &&
+            actionKind === "effect" && (
+              <EffectPicker
+                value={effect}
+                onChange={setEffect}
+                colorSource={colorSource}
+                onColorSourceChange={setColorSource}
+                showPilotColorOption={showPilotColorOption}
+              />
+            )}
+
+          {wizardStep === 3 &&
+            stepKind === "action" &&
+            actionKind === "solid" && (
+              <ColorSourcePicker
+                label="Color"
+                showPilotOption={showPilotColorOption}
+                colorSource={colorSource}
+                onColorSourceChange={setColorSource}
+                rgb={rgb}
+                onRgbChange={setRgb}
+              />
+            )}
 
           {wizardStep === 3 &&
             stepKind === "action" &&
             (actionKind === "effect" ||
               actionKind === "solid" ||
-              actionKind === "pilot_color") && (
+              actionKind === "choreography:tunnel") && (
               <BrightnessControl
                 value={brightnessPercent}
                 onChange={setBrightnessPercent}

@@ -2,13 +2,8 @@
 
 import { useMemo } from "react";
 import { ColorPicker } from "@/components/color-picker";
-import {
-  EFFECT_BY_ID,
-  EFFECT_CATALOG,
-  defaultEffectSelection,
-  mergeEffectParams,
-  type EffectSelection,
-} from "@/lib/effects";
+import { ColorSourcePicker } from "@/components/color-source-picker";
+import { LightEffectPreview } from "@/components/light-effect-preview";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -20,8 +15,15 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { LightEffectPreview } from "@/components/light-effect-preview";
+import type { ColorSource } from "@/lib/color-source";
 import { EFFECT_PREVIEW_BY_ID } from "@/lib/effect-preview";
+import {
+  defaultEffectSelection,
+  EFFECT_BY_ID,
+  EFFECT_CATALOG,
+  type EffectSelection,
+  mergeEffectParams,
+} from "@/lib/effects";
 import { cn } from "@/lib/utils";
 
 export type { EffectSelection };
@@ -32,6 +34,9 @@ type EffectPickerProps = {
   className?: string;
   /** Side-by-side effect select and parameters on wide screens. */
   layout?: "stacked" | "inline";
+  colorSource?: ColorSource;
+  onColorSourceChange?: (source: ColorSource) => void;
+  showPilotColorOption?: boolean;
 };
 
 const BASIC_EFFECTS = EFFECT_CATALOG.filter((e) => e.category === "basic");
@@ -45,10 +50,7 @@ function EffectPreview({ effectId, name }: { effectId: string; name: string }) {
   const previewType = EFFECT_PREVIEW_BY_ID[effectId];
   if (!previewType) return null;
   return (
-    <LightEffectPreview
-      type={previewType}
-      label={effectPreviewLabel(name)}
-    />
+    <LightEffectPreview type={previewType} label={effectPreviewLabel(name)} />
   );
 }
 
@@ -57,6 +59,9 @@ export function EffectPicker({
   onChange,
   className,
   layout = "stacked",
+  colorSource = "fixed",
+  onColorSourceChange,
+  showPilotColorOption = false,
 }: EffectPickerProps) {
   const effect = EFFECT_CATALOG.find((e) => e.id === value.effectId);
   const mergedParams = useMemo(
@@ -92,18 +97,13 @@ export function EffectPicker({
   const effectSelect = (
     <div className="space-y-2">
       <Label>Effect</Label>
-      <Select
-        value={value.effectId}
-        onValueChange={(v) => v && setEffectId(v)}
-      >
+      <Select value={value.effectId} onValueChange={(v) => v && setEffectId(v)}>
         <SelectTrigger className={layout === "inline" ? "w-full" : "min-w-48"}>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {effect ? (
               <EffectPreview effectId={effect.id} name={effect.name} />
             ) : null}
-            <span className="truncate">
-              {effect?.name ?? "Select effect"}
-            </span>
+            <span className="truncate">{effect?.name ?? "Select effect"}</span>
           </div>
         </SelectTrigger>
         <SelectContent className="min-w-(--anchor-width) w-max max-w-none">
@@ -143,11 +143,22 @@ export function EffectPicker({
     value.r !== undefined &&
     value.g !== undefined &&
     value.b !== undefined ? (
-      <ColorPicker
-        label="Color"
-        value={{ r: value.r, g: value.g, b: value.b }}
-        onChange={(rgb) => onChange({ ...value, ...rgb })}
-      />
+      showPilotColorOption && onColorSourceChange ? (
+        <ColorSourcePicker
+          label="Color"
+          showPilotOption
+          colorSource={colorSource}
+          onColorSourceChange={onColorSourceChange}
+          rgb={{ r: value.r, g: value.g, b: value.b }}
+          onRgbChange={(rgb) => onChange({ ...value, ...rgb })}
+        />
+      ) : (
+        <ColorPicker
+          label="Color"
+          value={{ r: value.r, g: value.g, b: value.b }}
+          onChange={(rgb) => onChange({ ...value, ...rgb })}
+        />
+      )
     ) : null;
 
   const paramsPanel =

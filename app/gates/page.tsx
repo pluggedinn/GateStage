@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
+import { GatesSortableTable } from "@/components/gates-sortable-table";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,15 +11,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import type { Gate } from "@/lib/config/schema";
 
 type DiscoverResult = {
@@ -106,24 +97,6 @@ export default function GatesPage() {
     await loadGates();
   }
 
-  async function testGate(gateId: string) {
-    const res = await fetch(`/api/gates/${gateId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "test" }),
-    });
-    const data = (await res.json()) as { ok: boolean; status?: number };
-    if (data.ok) {
-      toast.success("Test sent", {
-        description: `Rainbow effect on ${gateId}`,
-      });
-    } else {
-      toast.error("Test failed", {
-        description: `HTTP ${data.status ?? "error"}`,
-      });
-    }
-  }
-
   async function pingGate(gateId: string) {
     const res = await fetch(`/api/gates/${gateId}`, {
       method: "POST",
@@ -136,6 +109,32 @@ export default function GatesPage() {
     } else {
       toast.error("Gate offline", { description: gateId });
     }
+  }
+
+  async function reorderGates(orderedIds: string[]) {
+    const previous = gates;
+    const byId = new Map(previous.map((g) => [g.id, g]));
+    const optimistic = orderedIds
+      .map((id) => byId.get(id))
+      .filter((g): g is Gate => g !== undefined);
+    setGates(optimistic);
+
+    const res = await fetch("/api/gates/reorder", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+
+    if (!res.ok) {
+      setGates(previous);
+      const data = (await res.json()) as { error?: string };
+      toast.error("Could not save gate order", {
+        description: data.error ?? "Unknown error",
+      });
+      return;
+    }
+
+    setGates((await res.json()) as Gate[]);
   }
 
   return (
@@ -159,69 +158,25 @@ export default function GatesPage() {
           <CardDescription>
             {gates.length} gate(s) on the network
             {scanning ? " · scanning…" : ""}
+            {gates.length > 1
+              ? " · drag rows to set track order"
+              : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {gates.length === 0 ? (
             <p className="text-base text-muted-foreground">
-              No gates on the network. Ensure ESPHome devices are powered on,
-              on the same WiFi, and advertising mDNS — then scan.
+              No gates on the network. Ensure ESPHome devices are powered on, on
+              the same WiFi, and advertising mDNS — then scan.
             </p>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>ID</TableHead>
-                  <TableHead>Host</TableHead>
-                  <TableHead>Start</TableHead>
-                  <TableHead>Enabled</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {gates.map((gate) => (
-                  <TableRow key={gate.id}>
-                    <TableCell className="font-mono font-medium">
-                      {gate.id}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs">
-                      {gate.host}
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={gate.isStartGate}
-                        onCheckedChange={() => toggleStartGate(gate)}
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Switch
-                        checked={gate.enabled}
-                        onCheckedChange={() => toggleEnabled(gate)}
-                      />
-                    </TableCell>
-                    <TableCell className="space-x-2 text-right">
-                      {gate.isStartGate && (
-                        <Badge variant="secondary">start</Badge>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => testGate(gate.id)}
-                      >
-                        Test
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => pingGate(gate.id)}
-                      >
-                        Ping
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <GatesSortableTable
+              gates={gates}
+              onReorder={(orderedIds) => void reorderGates(orderedIds)}
+              onToggleStartGate={toggleStartGate}
+              onToggleEnabled={toggleEnabled}
+              onPingGate={pingGate}
+            />
           )}
         </CardContent>
       </Card>

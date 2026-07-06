@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { colorSourceSchema } from "@/lib/color-source";
 
 export const pilotColorSchema = z.object({
   r: z.number().int().min(0).max(255),
@@ -63,10 +64,9 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
     effectId: z.string().optional(),
     /** @deprecated use effectId */
     name: z.string().optional(),
-    params: z
-      .record(z.string(), z.union([z.number(), z.boolean()]))
-      .optional(),
+    params: z.record(z.string(), z.union([z.number(), z.boolean()])).optional(),
     brightnessPercent: z.number().int().min(1).max(100).optional(),
+    colorSource: colorSourceSchema.optional(),
     r: z.number().int().min(0).max(255).optional(),
     g: z.number().int().min(0).max(255).optional(),
     b: z.number().int().min(0).max(255).optional(),
@@ -77,14 +77,22 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
   }),
   z.object({
     kind: z.literal("solid"),
-    r: z.number().int(),
-    g: z.number().int(),
-    b: z.number().int(),
+    colorSource: colorSourceSchema.default("fixed"),
+    r: z.number().int().min(0).max(255).optional(),
+    g: z.number().int().min(0).max(255).optional(),
+    b: z.number().int().min(0).max(255).optional(),
     /** @deprecated use brightnessPercent */
     brightness: z.number().int().optional(),
     brightnessPercent: z.number().int().min(1).max(100).optional(),
   }),
   z.object({ kind: z.literal("off") }),
+  z.object({
+    kind: z.literal("choreography"),
+    choreographyId: z.string().min(1),
+    params: z
+      .record(z.string(), z.union([z.number(), z.boolean(), z.string()]))
+      .default({}),
+  }),
 ]);
 
 export type MappingAction = z.infer<typeof mappingActionSchema>;

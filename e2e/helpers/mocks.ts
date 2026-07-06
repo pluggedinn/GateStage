@@ -21,8 +21,19 @@ export async function getEsphomeState(port = ESPHOME_MOCK_FLEET[0].port) {
       entity: string;
       action: string;
       params: Record<string, string>;
+      at: string;
     }>;
   }>;
+}
+
+export function mockGatePort(gateId: string) {
+  const gate = ESPHOME_MOCK_FLEET.find((g) => g.id === gateId);
+  if (!gate) throw new Error(`Unknown mock gate: ${gateId}`);
+  return gate.port;
+}
+
+export async function getEsphomeStateForGate(gateId: string) {
+  return getEsphomeState(mockGatePort(gateId));
 }
 
 export async function emitNextEvent(type: string) {

@@ -1,7 +1,8 @@
-import type { SequenceStep } from "@/lib/types";
+import { describeChoreographyAction } from "@/lib/choreography";
 import { rgbToHex } from "@/lib/color";
+import { describeColorSource } from "@/lib/color-source";
 import { describeEffectAction } from "@/lib/effects";
-import type { MappingAction, MappingTarget } from "@/lib/types";
+import type { MappingAction, MappingTarget, SequenceStep } from "@/lib/types";
 
 function brightnessSuffix(percent?: number) {
   if (percent === undefined) return "";
@@ -20,19 +21,44 @@ export function describeStepTarget(
 export function describeGateAction(action: MappingAction): string {
   if (action.kind === "effect") {
     const effectId = action.effectId ?? action.name ?? "pulse";
+    const colorLabel =
+      action.colorSource === "pilot"
+        ? ` · ${describeColorSource("pilot")}`
+        : action.r !== undefined &&
+            action.g !== undefined &&
+            action.b !== undefined
+          ? ` · ${rgbToHex({ r: action.r, g: action.g, b: action.b })}`
+          : "";
     return (
       describeEffectAction(effectId, action.params) +
+      colorLabel +
       brightnessSuffix(action.brightnessPercent)
     );
   }
   if (action.kind === "solid") {
-    return (
-      rgbToHex({ r: action.r, g: action.g, b: action.b }) +
-      brightnessSuffix(action.brightnessPercent)
-    );
+    if (action.colorSource === "pilot") {
+      return (
+        describeColorSource("pilot") +
+        brightnessSuffix(action.brightnessPercent)
+      );
+    }
+    if (
+      action.r !== undefined &&
+      action.g !== undefined &&
+      action.b !== undefined
+    ) {
+      return (
+        rgbToHex({ r: action.r, g: action.g, b: action.b }) +
+        brightnessSuffix(action.brightnessPercent)
+      );
+    }
+    return `Solid color${brightnessSuffix(action.brightnessPercent)}`;
   }
   if (action.kind === "pilot_color") {
     return `Pilot color${brightnessSuffix(action.brightnessPercent)}`;
+  }
+  if (action.kind === "choreography") {
+    return describeChoreographyAction(action);
   }
   return "Off";
 }

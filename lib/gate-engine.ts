@@ -1,19 +1,23 @@
+import { resolveBrightnessPercent } from "@/lib/brightness";
 import type { Broadcaster } from "@/lib/broadcaster";
+import { runChoreography } from "@/lib/choreography";
+import { resolveActionColor } from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
 import {
   getDefaultBrightnessPercent,
   getGates,
   getSequence,
 } from "@/lib/config/store";
-import { resolveBrightnessPercent } from "@/lib/brightness";
 import { describeEffectAction } from "@/lib/effects";
-import { describeDelayStep } from "@/lib/sequence-display";
 import { type EsphomeCommand, sendEsphomeCommand } from "@/lib/esphome";
+import { ingestRaceEvent, resolvePilotColor } from "@/lib/heat-state";
+import { describeDelayStep } from "@/lib/sequence-display";
 import type {
   MappingAction,
   RaceActionEnvelope,
   RaceEvent,
   SequenceActionStep,
+  SequenceStep,
 } from "@/lib/types";
 
 const crossingDebounceMs = 400;
@@ -28,6 +32,8 @@ export class GateEngine {
   constructor(private broadcaster: Broadcaster) {}
 
   async dispatch(event: RaceEvent) {
+    ingestRaceEvent(event);
+
     if (event.type === "pilot.crossing") {
       const last = lastCrossingByPilot.get(event.pilot.id) ?? 0;
       const now = Date.now();
@@ -41,52 +47,97 @@ export class GateEngine {
     const enabledGates = getGates().filter((g) => g.enabled);
 
     for (const step of sequence.steps) {
-      if (step.kind === "delay") {
-        const label = describeDelayStep(step.ms);
-        this.broadcaster.emitRaceAction({
-          gateId: ROUTINE_LOG_GATE,
-          command: label,
-          success: true,
-          at: new Date().toISOString(),
-        });
-        await sleep(step.ms);
-        continue;
-      }
-
-      const targets = this.resolveTargets(
-        step.target,
-        step.targetGateId,
-        enabledGates,
-      );
-      const command = this.actionToCommand(step.action, event);
-      if (!command) continue;
-
-      await Promise.allSettled(
-        targets.map(async (gate) => {
-          const label = this.describeCommand(command);
-          try {
-            const res = await sendEsphomeCommand(gate.host, command);
-            const envelope: RaceActionEnvelope = {
-              gateId: gate.id,
-              command: label,
-              success: res.ok,
-              error: res.ok ? undefined : `HTTP ${res.status}`,
-              at: new Date().toISOString(),
-            };
-            this.broadcaster.emitRaceAction(envelope);
-          } catch (err) {
-            const envelope: RaceActionEnvelope = {
-              gateId: gate.id,
-              command: label,
-              success: false,
-              error: err instanceof Error ? err.message : "Unknown error",
-              at: new Date().toISOString(),
-            };
-            this.broadcaster.emitRaceAction(envelope);
-          }
-        }),
-      );
+      await this.runStep(step, event, enabledGates);
     }
+
+    const lastStep = sequence.steps[sequence.steps.length - 1];
+    if (isChoreographyStep(lastStep)) {
+      await this.turnOffAll(enabledGates);
+    }
+  }
+
+  private async runStep(
+    step: SequenceStep,
+    event: RaceEvent,
+    enabledGates: Gate[],
+  ) {
+    if (step.kind === "delay") {
+      const label = describeDelayStep(step.ms);
+      this.broadcaster.emitRaceAction({
+        gateId: ROUTINE_LOG_GATE,
+        command: label,
+        success: true,
+        at: new Date().toISOString(),
+      });
+      await sleep(step.ms);
+      return;
+    }
+
+    if (step.action.kind === "choreography") {
+      await runChoreography(step.action, {
+        gates: enabledGates,
+        event,
+        sleep,
+        sendToGate: async (gate, command, commandLabel) =>
+          this.sendCommandToGate(gate, command, commandLabel),
+      });
+      return;
+    }
+
+    const targets = this.resolveTargets(
+      step.target,
+      step.targetGateId,
+      enabledGates,
+    );
+    const command = this.actionToCommand(step.action, event);
+    if (!command) return;
+
+    await Promise.allSettled(
+      targets.map(async (gate) => {
+        const label = this.describeCommand(command);
+        await this.sendCommandToGate(gate, command, label);
+      }),
+    );
+  }
+
+  private async sendCommandToGate(
+    gate: Gate,
+    command: EsphomeCommand,
+    label: string,
+  ) {
+    try {
+      const res = await sendEsphomeCommand(gate.host, command);
+      const envelope: RaceActionEnvelope = {
+        gateId: gate.id,
+        command: label,
+        success: res.ok,
+        error: res.ok ? undefined : `HTTP ${res.status}`,
+        at: new Date().toISOString(),
+      };
+      this.broadcaster.emitRaceAction(envelope);
+      return { ok: res.ok, status: res.status };
+    } catch (err) {
+      const envelope: RaceActionEnvelope = {
+        gateId: gate.id,
+        command: label,
+        success: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+        at: new Date().toISOString(),
+      };
+      this.broadcaster.emitRaceAction(envelope);
+      return {
+        ok: false,
+        error: err instanceof Error ? err.message : "Unknown error",
+      };
+    }
+  }
+
+  private async turnOffAll(gates: Gate[]) {
+    await Promise.allSettled(
+      gates.map((gate) =>
+        this.sendCommandToGate(gate, { kind: "off" }, "turn_off"),
+      ),
+    );
   }
 
   private resolveTargets(
@@ -113,6 +164,7 @@ export class GateEngine {
     switch (action.kind) {
       case "effect": {
         const effectId = action.effectId ?? action.name ?? "pulse";
+        const rgb = resolveActionColor(action, event);
         return {
           kind: "effect",
           effectId,
@@ -121,45 +173,45 @@ export class GateEngine {
             action,
             getDefaultBrightnessPercent(),
           ),
-          ...(action.r !== undefined && {
-            r: action.r,
-            g: action.g,
-            b: action.b,
+          ...(rgb && {
+            r: rgb.r,
+            g: rgb.g,
+            b: rgb.b,
           }),
         };
       }
-      case "solid":
+      case "solid": {
+        const rgb = resolveActionColor(action, event);
+        if (!rgb) return null;
         return {
           kind: "rgb",
-          r: action.r,
-          g: action.g,
-          b: action.b,
-          brightnessPercent: resolveBrightnessPercent(
-            action,
-            getDefaultBrightnessPercent(),
-          ),
-        };
-      case "off":
-        return { kind: "off" };
-      case "pilot_color": {
-        const pilot =
-          event.type === "pilot.crossing"
-            ? event.pilot
-            : event.type === "heat.loaded" && event.pilots[0]
-              ? event.pilots[0]
-              : null;
-        if (!pilot) return null;
-        return {
-          kind: "rgb",
-          r: pilot.color.r,
-          g: pilot.color.g,
-          b: pilot.color.b,
+          r: rgb.r,
+          g: rgb.g,
+          b: rgb.b,
           brightnessPercent: resolveBrightnessPercent(
             action,
             getDefaultBrightnessPercent(),
           ),
         };
       }
+      case "off":
+        return { kind: "off" };
+      case "pilot_color": {
+        const color = resolvePilotColor(event);
+        if (!color) return null;
+        return {
+          kind: "rgb",
+          r: color.r,
+          g: color.g,
+          b: color.b,
+          brightnessPercent: resolveBrightnessPercent(
+            action,
+            getDefaultBrightnessPercent(),
+          ),
+        };
+      }
+      case "choreography":
+        return null;
       default:
         return null;
     }
@@ -173,4 +225,8 @@ export class GateEngine {
     }
     return `rgb(${command.r},${command.g},${command.b}) @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%`;
   }
+}
+
+function isChoreographyStep(step: SequenceStep | undefined): boolean {
+  return step?.kind === "action" && step.action.kind === "choreography";
 }

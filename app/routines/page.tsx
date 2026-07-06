@@ -22,16 +22,16 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { EventSequence, Gate } from "@/lib/config/schema";
+import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { rgbToHex } from "@/lib/color";
+import type { EventSequence, Gate } from "@/lib/config/schema";
+import { RACE_EVENT_TYPES, type RaceEventType } from "@/lib/race-events";
 import {
   describeDelayStep,
   describeGateAction,
   describeSequenceStep,
   describeStepTarget,
 } from "@/lib/sequence-display";
-import { RACE_EVENT_TYPES, type RaceEventType } from "@/lib/race-events";
-import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import type { MappingAction, SequenceStep } from "@/lib/types";
 
 export default function RoutinesPage() {
@@ -80,11 +80,14 @@ export default function RoutinesPage() {
     eventType: RaceEventType,
     step: Omit<SequenceStep, "id">,
   ) {
-    const res = await fetch(`/api/sequences/${encodeURIComponent(eventType)}/steps`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(step),
-    });
+    const res = await fetch(
+      `/api/sequences/${encodeURIComponent(eventType)}/steps`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(step),
+      },
+    );
     if (res.ok) {
       toast.success("Step added", { description: eventType });
       await load();
@@ -122,10 +125,20 @@ export default function RoutinesPage() {
 
   function renderActionSwatch(action: MappingAction) {
     if (action.kind === "solid") {
-      return rgbToHex({ r: action.r, g: action.g, b: action.b });
+      if (action.colorSource === "pilot") return null;
+      if (
+        action.r !== undefined &&
+        action.g !== undefined &&
+        action.b !== undefined
+      ) {
+        return rgbToHex({ r: action.r, g: action.g, b: action.b });
+      }
+      return null;
     }
+    if (action.kind === "pilot_color") return null;
     if (
       action.kind === "effect" &&
+      action.colorSource !== "pilot" &&
       action.r !== undefined &&
       action.g !== undefined &&
       action.b !== undefined
@@ -138,7 +151,9 @@ export default function RoutinesPage() {
   function renderStepCell(step: SequenceStep) {
     if (step.kind === "delay") {
       return (
-        <span className="text-muted-foreground">{describeDelayStep(step.ms)}</span>
+        <span className="text-muted-foreground">
+          {describeDelayStep(step.ms)}
+        </span>
       );
     }
 
@@ -208,7 +223,8 @@ export default function RoutinesPage() {
               <CardContent>
                 {steps.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    No steps yet. Add gate actions or waits to build this routine.
+                    No steps yet. Add gate actions or waits to build this
+                    routine.
                   </p>
                 ) : (
                   <Table>

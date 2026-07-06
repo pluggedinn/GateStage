@@ -1,6 +1,11 @@
 import fs from "node:fs";
 import path from "node:path";
-import { type Config, type EventSequence, type Gate, configSchema } from "./schema";
+import {
+  type Config,
+  configSchema,
+  type EventSequence,
+  type Gate,
+} from "./schema";
 
 const dataDir = path.join(process.cwd(), "data");
 const configPath =
@@ -41,8 +46,7 @@ function loadConfigFromDisk(): Config {
 }
 
 function defaultConfig(): Config {
-  const nextWsUrl =
-    process.env.NEXT_WS_URL ?? "ws://127.0.0.1:9400";
+  const nextWsUrl = process.env.NEXT_WS_URL ?? "ws://127.0.0.1:9400";
 
   return {
     version: 2,
@@ -91,6 +95,36 @@ export function getGates(): Gate[] {
 
 export function getGate(id: string): Gate | undefined {
   return getConfig().gates.find((g) => g.id === id);
+}
+
+export function reorderGates(orderedIds: string[]): Gate[] {
+  const current = getGates();
+  const currentIds = new Set(current.map((g) => g.id));
+  const orderedSet = new Set(orderedIds);
+
+  if (orderedIds.length !== current.length) {
+    throw new Error("orderedIds must include every gate exactly once");
+  }
+  if (orderedIds.length !== orderedSet.size) {
+    throw new Error("orderedIds must not contain duplicates");
+  }
+  for (const id of orderedIds) {
+    if (!currentIds.has(id)) {
+      throw new Error(`Unknown gate id: ${id}`);
+    }
+  }
+
+  saveConfig((config) => {
+    const byId = new Map(config.gates.map((g) => [g.id, g]));
+    const gates = orderedIds.map((id, sortOrder) => {
+      const gate = byId.get(id);
+      if (!gate) throw new Error(`Unknown gate id: ${id}`);
+      return { ...gate, sortOrder };
+    });
+    return { ...config, gates };
+  });
+
+  return getGates();
 }
 
 export function getSequences(): EventSequence[] {
@@ -146,27 +180,36 @@ export function mergeDiscoveredGates(
     .filter((g) => !discoveredIds.has(g.id))
     .map((g) => g.id);
 
+  const maxSortOrder = previous.reduce(
+    (max, gate) => Math.max(max, gate.sortOrder),
+    -1,
+  );
+  let nextSortOrder = maxSortOrder + 1;
+
   saveConfig((config) => {
-    let gates: Gate[] = discovered.map((item, sortOrder) => {
+    let gates: Gate[] = discovered.map((item) => {
       const existing = previous.find((g) => g.id === item.id);
       if (existing) {
         if (existing.host !== item.host) updated.push(item.id);
-        return { ...existing, host: item.host, sortOrder };
+        return { ...existing, host: item.host };
       }
 
       added.push(item.id);
-      return {
+      const gate: Gate = {
         id: item.id,
         host: item.host,
         isStartGate: false,
         enabled: true,
-        sortOrder,
+        sortOrder: nextSortOrder,
       };
+      nextSortOrder += 1;
+      return gate;
     });
 
     if (gates.length > 0 && !gates.some((g) => g.isStartGate)) {
-      gates = gates.map((g, i) =>
-        i === 0 ? { ...g, isStartGate: true } : g,
+      const first = [...gates].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      gates = gates.map((g) =>
+        g.id === first?.id ? { ...g, isStartGate: true } : g,
       );
     }
 
