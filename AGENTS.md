@@ -81,6 +81,14 @@ Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-se
 
 ---
 
+## Dev caveats
+
+- **Health endpoints:** `/api/health` (app), `:9401/health` (mock Next), `:9080/health` (mock ESPHome).
+- **Fresh config has no routines.** First boot creates `data/config.json` with `"sequences": []`, so race events won't light gates until routines are configured (Routines UI or `POST /api/sequences/<eventType>/steps`). `e2e/gate-automation.spec.ts` ("heat.go triggers green RGB") fails on a fresh config for this reason — other e2e specs seed their own steps.
+- **Lint may exit non-zero on `main`** — pre-existing Biome formatting issues; not a broken setup.
+
+---
+
 ## Where to start
 
 | Task | Files |
