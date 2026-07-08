@@ -85,7 +85,7 @@ Tailwind utilities: `text-status-ok`, `bg-status-warn`, `border-status-error`, e
 | `app/globals.css` | Token definitions + `@theme` Tailwind bridge |
 | `components/providers.tsx` | `ThemeProvider` (system default) |
 | `components/theme-toggle.tsx` | Sun/moon toggle in nav |
-| `components/connection-status.tsx` | Socket + Next indicators in nav |
+| `components/connection-status.tsx` | Socket + race manager indicators in nav |
 | `components/nav.tsx` | Brand accent + active route + connections + theme toggle |
 | `hooks/use-race-socket.tsx` | Shared `RaceSocketProvider` (single socket) |
 | `app/layout.tsx` | `text-base` on body; theme class on `<html>` via `next-themes` |

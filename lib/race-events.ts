@@ -12,7 +12,7 @@ export const RACE_EVENT_TYPES: readonly RaceEventDef[] = [
   {
     id: "heat.loaded",
     label: "Heat loaded",
-    description: "Pilots and heat info received from Next",
+    description: "Pilots and heat info received from your race manager",
   },
   {
     id: "heat.arm_started",

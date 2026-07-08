@@ -3,7 +3,11 @@ import { parse } from "node:url";
 import next from "next";
 import { Server as SocketServer } from "socket.io";
 import { broadcaster } from "./lib/broadcaster";
-import { getRaceBrain, initRaceBrain } from "./lib/race-brain";
+import {
+  getRaceBrain,
+  initRaceBrain,
+  shutdownRaceBrain,
+} from "./lib/race-brain";
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
@@ -27,10 +31,15 @@ app.prepare().then(() => {
 
   io.on("connection", (socket) => {
     console.log("[socket.io] client connected", socket.id);
-    const { nextListener } = getRaceBrain();
-    socket.emit("connection:next", {
-      nextConnected: nextListener?.isConnected() ?? false,
-    });
+    const { raceManagerListener } = getRaceBrain();
+    socket.emit(
+      "connection:raceManager",
+      raceManagerListener?.getConnectionState() ?? {
+        provider: "next",
+        connected: false,
+        status: "available",
+      },
+    );
     broadcaster.replayRecent(socket);
     socket.on("disconnect", () => {
       console.log("[socket.io] client disconnected", socket.id);
@@ -40,4 +49,10 @@ app.prepare().then(() => {
   httpServer.listen(port, hostname, () => {
     console.log(`[gatestage] ready on http://${hostname}:${port}`);
   });
+
+  const shutdown = () => {
+    shutdownRaceBrain();
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
 });

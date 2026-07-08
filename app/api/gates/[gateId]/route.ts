@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { broadcaster } from "@/lib/broadcaster";
-import { getGate, saveConfig } from "@/lib/config/store";
+import { getGate, rememberStartGateId, saveConfig } from "@/lib/config/store";
 import { pingGate, sendEsphomeCommand } from "@/lib/esphome";
 
 type Params = { params: Promise<{ gateId: string }> };
@@ -37,6 +37,10 @@ export async function PATCH(request: Request, { params }: Params) {
       return updated;
     }),
   }));
+
+  if (body.isStartGate) {
+    rememberStartGateId(gateId);
+  }
 
   broadcaster.emitConfigUpdated();
   return NextResponse.json(updated);

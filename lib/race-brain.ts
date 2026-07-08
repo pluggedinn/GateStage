@@ -1,23 +1,47 @@
 import { broadcaster } from "./broadcaster";
-import { initConfig } from "./config/store";
+import { initConfig, reloadConfig } from "./config/store";
 import { syncGatesFromNetwork } from "./gate-discovery";
 import { GateEngine } from "./gate-engine";
-import { NextListener } from "./next-listener";
+import { RaceManagerListener } from "./race-manager-listener";
 
-let gateEngine: GateEngine | null = null;
-let nextListener: NextListener | null = null;
-let initialized = false;
-let discoveryTimer: NodeJS.Timeout | null = null;
+const GLOBAL_BRAIN_KEY = "__gatestage_race_brain__";
+
+type BrainState = {
+  gateEngine: GateEngine | null;
+  raceManagerListener: RaceManagerListener | null;
+  initialized: boolean;
+  discoveryTimer: NodeJS.Timeout | null;
+};
 
 const DISCOVERY_INTERVAL_MS = Number(
   process.env.GATESTAGE_DISCOVERY_INTERVAL_MS ?? 15_000,
 );
 
-export function getRaceBrain() {
-  if (!gateEngine) {
-    gateEngine = new GateEngine(broadcaster);
+function brainState(): BrainState {
+  const globalStore = globalThis as typeof globalThis & {
+    [GLOBAL_BRAIN_KEY]?: BrainState;
+  };
+  if (!globalStore[GLOBAL_BRAIN_KEY]) {
+    globalStore[GLOBAL_BRAIN_KEY] = {
+      gateEngine: null,
+      raceManagerListener: null,
+      initialized: false,
+      discoveryTimer: null,
+    };
   }
-  return { gateEngine, broadcaster, nextListener };
+  return globalStore[GLOBAL_BRAIN_KEY];
+}
+
+export function getRaceBrain() {
+  const state = brainState();
+  if (!state.gateEngine) {
+    state.gateEngine = new GateEngine(broadcaster);
+  }
+  return {
+    gateEngine: state.gateEngine,
+    broadcaster,
+    raceManagerListener: state.raceManagerListener,
+  };
 }
 
 async function runGateDiscovery() {
@@ -40,26 +64,49 @@ async function runGateDiscovery() {
 }
 
 export function initRaceBrain() {
-  if (initialized) return getRaceBrain();
-  initialized = true;
+  const state = brainState();
+  if (state.initialized) return getRaceBrain();
+  state.initialized = true;
 
   initConfig();
+  reloadConfig();
   const brain = getRaceBrain();
-  nextListener = new NextListener(brain.gateEngine, broadcaster);
-  nextListener.start();
+  state.raceManagerListener = new RaceManagerListener(
+    brain.gateEngine,
+    broadcaster,
+  );
+  state.raceManagerListener.start();
 
   void runGateDiscovery();
-  discoveryTimer = setInterval(() => {
+  state.discoveryTimer = setInterval(() => {
     void runGateDiscovery();
   }, DISCOVERY_INTERVAL_MS);
 
   console.log("[race-brain] initialized");
-  return brain;
+  return getRaceBrain();
 }
 
 export function shutdownRaceBrain() {
-  nextListener?.stop();
-  nextListener = null;
-  if (discoveryTimer) clearInterval(discoveryTimer);
-  discoveryTimer = null;
+  const state = brainState();
+  state.raceManagerListener?.stop();
+  state.raceManagerListener = null;
+  if (state.discoveryTimer) clearInterval(state.discoveryTimer);
+  state.discoveryTimer = null;
+  state.initialized = false;
+}
+
+/** Re-read config and reconnect the active race-manager adapter (e.g. after Settings save). */
+export function reloadRaceManagerListener() {
+  const state = brainState();
+  const brain = getRaceBrain();
+  if (!state.raceManagerListener) {
+    state.raceManagerListener = new RaceManagerListener(
+      brain.gateEngine,
+      broadcaster,
+    );
+    reloadConfig();
+    state.raceManagerListener.start();
+    return;
+  }
+  state.raceManagerListener.restart();
 }

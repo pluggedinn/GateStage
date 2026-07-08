@@ -1,6 +1,6 @@
 # GateStage — Agent Guide
 
-**LED gate control for FPV whoop races.** Listens to [Next](https://go-next.co/) race events and drives ESPHome LED gates over the race LAN. Runs on the race director laptop; crew use browsers on the same WiFi.
+**LED gate control for FPV whoop races.** Listens to race events from supported race managers (Next available today; FPV Trackside and RotorHazard planned) and drives ESPHome LED gates over the race LAN. Runs on the race director laptop; crew use browsers on the same WiFi.
 
 Canonical entry point for coding agents. UI: `docs/DESIGN.md`. Gate firmware: `docs/ESPHOME.md`.
 
@@ -28,7 +28,7 @@ More commands and ports: [README.md](./README.md).
 ## Hard rules
 
 1. **Server is the brain** — race automation lives in `lib/` (Node), not React clients. Browsers are thin Socket.io clients.
-2. **Run via `server.ts`** — not plain `next dev` (no Socket.io / RaceBrain / Next listener otherwise).
+2. **Run via `server.ts`** — not plain `next dev` (no Socket.io / RaceBrain / race manager listener otherwise).
 3. **ESPHome from server only** — never call ESP32 from the browser (CORS). Use `lib/esphome.ts`.
 4. **Gates are discovered** — mDNS (`_esphomelib._tcp`), not manually created. No `POST /api/gates`.
 5. **Bind `0.0.0.0`** — crew reach `http://<rd-laptop-ip>:8080`. No auth (trusted LAN).
@@ -39,7 +39,7 @@ More commands and ports: [README.md](./README.md).
 ## Architecture
 
 ```
-Next RD app  ──WebSocket──▶  server.ts / RaceBrain (lib/)
+Race manager  ──WebSocket──▶  server.ts / RaceBrain (lib/)
                                     ├── data/config.json
                                     ├── ESPHome HTTP REST
                                     └── Socket.io → browsers
@@ -48,7 +48,8 @@ Next RD app  ──WebSocket──▶  server.ts / RaceBrain (lib/)
 | Layer | Where |
 |-------|-------|
 | Boot + Socket.io | `server.ts` → `initRaceBrain()` |
-| Next WS client | `lib/next-listener.ts` |
+| Integration registry | `lib/integrations.ts` |
+| Race manager WS client | `lib/race-manager-listener.ts` (Next implemented; others WIP) |
 | Event → actions | `lib/gate-engine.ts` |
 | ESPHome commands | `lib/esphome.ts` (entity: **`"Gate LEDs"`**) |
 | Config (Zod JSON) | `lib/config/` |
@@ -67,9 +68,25 @@ Path alias: `@/*` → project root. Server logic in `lib/`, UI in `app/` + `comp
 - **Sequences** (UI: Routines): event type → ordered steps (`action` or `delay`)
 - **Actions:** `effect` | `solid` | `off` | `pilot_color` | `choreography`
 - **Targets:** `all` | `start_gate` | `gate_id`
+- **Settings:** `raceManagerProvider` (`next` | `trackside` | `rotorhazard`), `nextWsUrl` (Next WebSocket), `rotorHazardUrl` (RotorHazard Socket.io), `defaultBrightnessPercent`
+
 - Default brightness: **5%** (`defaultBrightnessPercent`)
 
 Schemas: `lib/config/schema.ts`, `lib/types.ts`. API routes: `app/api/`.
+
+---
+
+## Race managers
+
+Providers are defined in `lib/integrations.ts`. `raceManagerProvider` in settings selects which integration `RaceManagerListener` uses.
+
+| Provider | Status |
+|----------|--------|
+| Next | Available (WebSocket via `nextWsUrl`) |
+| FPV Trackside | Work in progress (stub) |
+| RotorHazard | Available (Socket.io via `rotorHazardUrl`; heat lifecycle + crossings) |
+
+Changing provider or URL reconnects the listener automatically (Settings save).
 
 ---
 
@@ -93,6 +110,7 @@ Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-se
 
 | Task | Files |
 |------|-------|
+| Race manager integrations | `lib/integrations.ts`, `lib/race-manager-listener.ts` |
 | Automation logic | `lib/gate-engine.ts` |
 | Gate commands | `lib/esphome.ts`, `lib/effects.ts` |
 | Config / schema | `lib/config/schema.ts`, `lib/config/store.ts` |

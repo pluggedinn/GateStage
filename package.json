@@ -16,14 +16,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 ESPHOME_MOCK_FLEET=1 tsx watch --exclude data/** server.ts",
-    "dev:server": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 ESPHOME_MOCK_FLEET=1 tsx server.ts",
+    "dev": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 tsx watch --exclude data/** server.ts",
+    "dev:server": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 tsx server.ts",
     "build": "next build",
     "start": "NODE_ENV=production PORT=8080 tsx server.ts",
     "mock:next": "tsx mocks/next-ws-server.ts",
     "mock:esphome": "tsx mocks/esphome-mock-fleet.ts",
     "mock:esphome:single": "tsx mocks/esphome-mock-server.ts",
-    "dev:mocks": "concurrently -k -n next,esphome,app -c blue,magenta,green \"npm run mock:next\" \"npm run mock:esphome\" \"npm run dev\"",
+    "dev:mocks": "concurrently -k -n next,esphome,app -c blue,magenta,green \"npm run mock:next\" \"npm run mock:esphome\" \"ESPHOME_MOCK_FLEET=1 npm run dev\"",
     "test:e2e": "playwright test",
     "lint": "biome check",
     "format": "biome format --write"

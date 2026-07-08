@@ -8,27 +8,37 @@
 
 <h3 align="center">LED gate control for FPV whoop races.</h3>
 
-Your race director laptop is already running [Next](https://go-next.co/) — heats, pilots, frequencies, the stream.
+Your race director laptop is already running a race manager — heats, pilots, frequencies, the stream.
 But when the heat goes live, who's driving the start gate, finish arch, and LED cues on the course?
 
-GateStage listens to Next race events and commands ESPHome gates over the race LAN — so lights go green when they should, without another app to babysit or a cloud hop in between.
+GateStage listens to race events from supported race managers and commands ESPHome gates over the race LAN — so lights go green when they should, without another app to babysit or a cloud hop in between.
 
 ## What it is
 
-FPV whoop races need synchronized LED gates — start lights, finish arches, status cues — tied to what Next is doing in the heat.
+FPV whoop races need synchronized LED gates — start lights, finish arches, status cues — tied to what your race manager is doing in the heat.
 
-GateStage is a local server that runs beside Next on the race director laptop.
-It subscribes to Next race events, maps them to gate behaviors you've configured, and drives ESP32 + ESPHome hardware over HTTP on the LAN.
+GateStage is a local server that runs beside your race manager on the race director laptop.
+It subscribes to race events, maps them to gate behaviors you've configured, and drives ESP32 + ESPHome hardware over HTTP on the LAN.
 A web UI serves configuration, manual control, and a live event console to the RD and crew tablets on the same WiFi.
 
 This is not a lap timer — that's Nuclear Hazard / RotorHazard.
-This is not a replacement for Next.
-This is the glue between Next and your LED gates.
+This is not a replacement for your race manager.
+This is the glue between your race manager and your LED gates.
+
+### Supported race managers
+
+| Race manager | Supported | Status |
+|--------------|-----------|--------|
+| [Next](https://go-next.co/) | ✓ | Available |
+| FPV Trackside | ✗ | Work in progress |
+| RotorHazard | ✓ | Available (Socket.io; pilot names pending) |
+
+Select your provider in **Settings**. Only Next connects today; other integrations are placeholders while protocol work is underway.
 
 ## Features
 
-- **One brain on the RD laptop** — GateStage owns the Next WebSocket, event mapping, and ESPHome commands; browsers are thin clients.
-- **Event-driven gate control** — heat start, finish, and configurable routines from Next race events.
+- **One brain on the RD laptop** — GateStage owns the race manager connection, event mapping, and ESPHome commands; browsers are thin clients.
+- **Event-driven gate control** — heat start, finish, and configurable routines from race events.
 - **Automatic gate discovery** — mDNS scans the race WiFi for ESPHome devices on startup and every 15 seconds.
 - **Crew-friendly** — binds to `0.0.0.0` so anyone on race WiFi can open settings, the live console, or manual override.
 - **Zod-validated config** — settings in `data/config.json` with export/import via `GET/POST /api/config`.
@@ -73,7 +83,7 @@ curl http://127.0.0.1:9085/state   # gate-finish
 ## How It Works
 
 ```
-  Next RD app
+  Race manager (e.g. Next)
   (race director laptop)
        │  WebSocket race events
        ▼
@@ -89,8 +99,8 @@ curl http://127.0.0.1:9085/state   # gate-finish
  (ESP32-C5)
 ```
 
-GateStage runs on the same laptop as Next.
-The server connects to Next over localhost WebSocket, translates race events into ESPHome REST calls, and broadcasts live events to every browser tab on the race LAN.
+GateStage runs on the same laptop as your race manager.
+The server connects over WebSocket (Next today), translates race events into ESPHome REST calls, and broadcasts live events to every browser tab on the race LAN.
 Gate discovery uses mDNS (`_esphomelib._tcp`) so only reachable devices on the LAN appear in your gate list.
 
 Full hardware and networking context lives in [AGENTS.md](./AGENTS.md#architecture).
@@ -106,7 +116,7 @@ Trigger a scan anytime:
 curl -X POST http://127.0.0.1:8080/api/gates/discover
 ```
 
-In dev (`ESPHOME_MOCK_FLEET=1`), six mock gates join discovery on ports 9080–9085: `gate-start`, `gate-2` … `gate-5`, `gate-finish`.
+With `npm run dev:mocks` (`ESPHOME_MOCK_FLEET=1`), six mock gates join discovery on ports 9080–9085: `gate-start`, `gate-2` … `gate-5`, `gate-finish`.
 
 Export/import via `GET/POST /api/config`.
 
@@ -140,12 +150,12 @@ Export/import via `GET/POST /api/config`.
 
 ## Race environment
 
-GateStage runs on the **race director laptop** alongside [Next](https://go-next.co/). ESP32 gates join the **same 5 GHz race WiFi** as the laptop. Server binds to `0.0.0.0` so crew open `http://<rd-laptop-ip>:8080`. No login in v1 — trusted LAN.
+GateStage runs on the **race director laptop** alongside your race manager (e.g. [Next](https://go-next.co/)). ESP32 gates join the **same 5 GHz race WiFi** as the laptop. Server binds to `0.0.0.0` so crew open `http://<rd-laptop-ip>:8080`. No login in v1 — trusted LAN.
 
 **Race day checklist**
 
 1. Race WiFi AP up (5 GHz; Channel 36 preferred — keeps WiFi away from analog VTX on Raceband)
-2. RD laptop on race WiFi; Next running and connected to the RotorHazard timer
+2. RD laptop on race WiFi; race manager running (Next + RotorHazard timer, or your chosen stack)
 3. GateStage running; crew URL shared
 4. All ESP32 gates online on race WiFi (DHCP reservations help)
 5. Internet optional — timing and gate control work offline on the LAN

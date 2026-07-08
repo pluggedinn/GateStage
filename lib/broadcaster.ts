@@ -1,7 +1,9 @@
-import type { Server as SocketServer, Socket } from "socket.io";
+import type { Socket, Server as SocketServer } from "socket.io";
+import type { RaceManagerConnectionState } from "./integrations";
 import type { RaceActionEnvelope, RaceEventEnvelope } from "./types";
 
 const BUFFER_LIMIT = 100;
+const GLOBAL_BROADCASTER_KEY = "__gatestage_broadcaster__";
 
 export class Broadcaster {
   private recentEvents: RaceEventEnvelope[] = [];
@@ -44,9 +46,20 @@ export class Broadcaster {
     this.io?.emit("gate:health", { gateId, online });
   }
 
-  emitNextConnection(connected: boolean) {
-    this.io?.emit("connection:next", { nextConnected: connected });
+  emitRaceManagerConnection(state: RaceManagerConnectionState) {
+    this.io?.emit("connection:raceManager", state);
   }
 }
 
-export const broadcaster = new Broadcaster(null);
+/** Shared across server.ts and Next.js API routes (separate module instances in dev). */
+function getBroadcaster(): Broadcaster {
+  const globalStore = globalThis as typeof globalThis & {
+    [GLOBAL_BROADCASTER_KEY]?: Broadcaster;
+  };
+  if (!globalStore[GLOBAL_BROADCASTER_KEY]) {
+    globalStore[GLOBAL_BROADCASTER_KEY] = new Broadcaster(null);
+  }
+  return globalStore[GLOBAL_BROADCASTER_KEY];
+}
+
+export const broadcaster = getBroadcaster();

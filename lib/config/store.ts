@@ -4,6 +4,7 @@ import {
   type Config,
   configSchema,
   type EventSequence,
+  eventSequenceSchema,
   type Gate,
 } from "./schema";
 
@@ -50,7 +51,13 @@ function defaultConfig(): Config {
 
   return {
     version: 2,
-    settings: { nextWsUrl, defaultBrightnessPercent: 5 },
+    settings: {
+      raceManagerProvider: "next",
+      nextWsUrl,
+      rotorHazardUrl:
+        process.env.ROTORHAZARD_URL ?? "http://rotorhazard.local:5000",
+      defaultBrightnessPercent: 5,
+    },
     gates: [],
     sequences: [],
   };
@@ -135,6 +142,53 @@ export function getSequence(eventType: string): EventSequence | undefined {
   return getConfig().sequences.find((s) => s.eventType === eventType);
 }
 
+export function reorderSequenceSteps(
+  eventType: string,
+  orderedIds: string[],
+): EventSequence {
+  const sequence = getSequence(eventType);
+  if (!sequence) {
+    throw new Error("Routine not found");
+  }
+
+  const currentIds = new Set(sequence.steps.map((s) => s.id));
+  const orderedSet = new Set(orderedIds);
+
+  if (orderedIds.length !== sequence.steps.length) {
+    throw new Error("orderedIds must include every step exactly once");
+  }
+  if (orderedIds.length !== orderedSet.size) {
+    throw new Error("orderedIds must not contain duplicates");
+  }
+  for (const id of orderedIds) {
+    if (!currentIds.has(id)) {
+      throw new Error(`Unknown step id: ${id}`);
+    }
+  }
+
+  saveConfig((config) => {
+    const byId = new Map(sequence.steps.map((s) => [s.id, s]));
+    const steps = orderedIds.map((id) => {
+      const step = byId.get(id);
+      if (!step) throw new Error(`Unknown step id: ${id}`);
+      return step;
+    });
+
+    return {
+      ...config,
+      sequences: config.sequences.map((s) =>
+        s.eventType === eventType
+          ? eventSequenceSchema.parse({ ...s, steps })
+          : s,
+      ),
+    };
+  });
+
+  const updated = getSequence(eventType);
+  if (!updated) throw new Error("Routine not found");
+  return updated;
+}
+
 export function getSetting<K extends keyof Config["settings"]>(
   key: K,
 ): Config["settings"][K] {
@@ -169,16 +223,42 @@ export type DiscoveredGateSummary = {
   source: "mdns" | "env";
 };
 
+const DISCOVERY_MAX_MISSED_SCANS = Number(
+  process.env.GATESTAGE_DISCOVERY_MAX_MISSES ?? 3,
+);
+
+/** Last-known gate metadata — survives brief discovery dropouts. */
+const lastKnownById = new Map<string, Gate>();
+const missedScansById = new Map<string, number>();
+let rememberedStartGateId: string | null = null;
+
+function syncRememberedStartGateFromGates(gates: Gate[]) {
+  const start = gates.find((g) => g.isStartGate);
+  if (start) rememberedStartGateId = start.id;
+}
+
+function snapshotGates(gates: Gate[]) {
+  for (const gate of gates) {
+    lastKnownById.set(gate.id, structuredClone(gate));
+  }
+  syncRememberedStartGateFromGates(gates);
+}
+
+/** Called when the user explicitly sets the start gate in the UI. */
+export function rememberStartGateId(id: string) {
+  rememberedStartGateId = id;
+}
+
 export function mergeDiscoveredGates(
   discovered: DiscoveredGateSummary[],
 ): MergeDiscoveryResult {
   const previous = getGates();
+  snapshotGates(previous);
+
   const discoveredIds = new Set(discovered.map((d) => d.id));
   const added: string[] = [];
   const updated: string[] = [];
-  const removed = previous
-    .filter((g) => !discoveredIds.has(g.id))
-    .map((g) => g.id);
+  const removed: string[] = [];
 
   const maxSortOrder = previous.reduce(
     (max, gate) => Math.max(max, gate.sortOrder),
@@ -186,35 +266,73 @@ export function mergeDiscoveredGates(
   );
   let nextSortOrder = maxSortOrder + 1;
 
-  saveConfig((config) => {
-    let gates: Gate[] = discovered.map((item) => {
-      const existing = previous.find((g) => g.id === item.id);
-      if (existing) {
-        if (existing.host !== item.host) updated.push(item.id);
-        return { ...existing, host: item.host };
+  const merged = new Map<string, Gate>();
+
+  for (const item of discovered) {
+    const existing =
+      previous.find((g) => g.id === item.id) ?? lastKnownById.get(item.id);
+
+    if (existing) {
+      if (!previous.some((g) => g.id === item.id)) {
+        added.push(item.id);
+      } else if (existing.host !== item.host) {
+        updated.push(item.id);
       }
-
-      added.push(item.id);
-      const gate: Gate = {
-        id: item.id,
-        host: item.host,
-        isStartGate: false,
-        enabled: true,
-        sortOrder: nextSortOrder,
-      };
-      nextSortOrder += 1;
-      return gate;
-    });
-
-    if (gates.length > 0 && !gates.some((g) => g.isStartGate)) {
-      const first = [...gates].sort((a, b) => a.sortOrder - b.sortOrder)[0];
-      gates = gates.map((g) =>
-        g.id === first?.id ? { ...g, isStartGate: true } : g,
-      );
+      merged.set(item.id, { ...existing, host: item.host });
+      missedScansById.set(item.id, 0);
+      continue;
     }
 
-    return { ...config, gates };
-  });
+    added.push(item.id);
+    merged.set(item.id, {
+      id: item.id,
+      host: item.host,
+      isStartGate: false,
+      enabled: true,
+      sortOrder: nextSortOrder,
+    });
+    nextSortOrder += 1;
+    missedScansById.set(item.id, 0);
+  }
+
+  for (const gate of previous) {
+    if (discoveredIds.has(gate.id)) continue;
+
+    const misses = (missedScansById.get(gate.id) ?? 0) + 1;
+    missedScansById.set(gate.id, misses);
+
+    if (misses < DISCOVERY_MAX_MISSED_SCANS) {
+      merged.set(gate.id, gate);
+    } else {
+      removed.push(gate.id);
+      missedScansById.delete(gate.id);
+    }
+  }
+
+  let gates = [...merged.values()];
+
+  if (
+    rememberedStartGateId &&
+    gates.some((g) => g.id === rememberedStartGateId)
+  ) {
+    gates = gates.map((g) => ({
+      ...g,
+      isStartGate: g.id === rememberedStartGateId,
+    }));
+  } else if (gates.length > 0 && !gates.some((g) => g.isStartGate)) {
+    const first = [...gates].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+    gates = gates.map((g) =>
+      g.id === first?.id ? { ...g, isStartGate: true } : g,
+    );
+    if (first) rememberedStartGateId = first.id;
+  }
+
+  saveConfig((config) => ({
+    ...config,
+    gates,
+  }));
+
+  snapshotGates(gates);
 
   return {
     discovered,

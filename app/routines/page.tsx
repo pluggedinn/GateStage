@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { RoutineStepWizard } from "@/components/routine-step-wizard";
-import { Badge } from "@/components/ui/badge";
+import { RoutineStepsSortableTable } from "@/components/routine-steps-sortable-table";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -14,14 +14,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { rgbToHex } from "@/lib/color";
 import type { EventSequence, Gate } from "@/lib/config/schema";
@@ -121,6 +113,51 @@ export default function RoutinesPage() {
     }
     toast.success("Step removed");
     await load();
+  }
+
+  async function reorderSteps(
+    eventType: RaceEventType,
+    orderedIds: string[],
+  ) {
+    const previous = sequences;
+    const sequence = sequenceByEvent.get(eventType);
+    if (!sequence) return;
+
+    const byId = new Map(sequence.steps.map((s) => [s.id, s]));
+    const optimisticSteps = orderedIds
+      .map((id) => byId.get(id))
+      .filter((s): s is SequenceStep => s !== undefined);
+
+    setSequences(
+      previous.map((s) =>
+        s.eventType === eventType
+          ? { ...s, steps: optimisticSteps }
+          : s,
+      ),
+    );
+
+    const res = await fetch(
+      `/api/sequences/${encodeURIComponent(eventType)}/steps/reorder`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderedIds }),
+      },
+    );
+
+    if (!res.ok) {
+      setSequences(previous);
+      const data = (await res.json()) as { error?: string };
+      toast.error("Could not reorder steps", {
+        description: data.error ?? "Try again.",
+      });
+      return;
+    }
+
+    const updated = (await res.json()) as EventSequence;
+    setSequences((current) =>
+      current.map((s) => (s.eventType === eventType ? updated : s)),
+    );
   }
 
   function renderActionSwatch(action: MappingAction) {
@@ -227,42 +264,22 @@ export default function RoutinesPage() {
                     routine.
                   </p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12">#</TableHead>
-                        <TableHead>Step</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {steps.map((step, index) => (
-                        <TableRow key={step.id}>
-                          <TableCell className="font-mono tabular-nums text-muted-foreground">
-                            {index + 1}
-                          </TableCell>
-                          <TableCell>{renderStepCell(step)}</TableCell>
-                          <TableCell className="space-x-2 text-right">
-                            {step.kind === "delay" && (
-                              <Badge variant="secondary">wait</Badge>
-                            )}
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() =>
-                                setStepToDelete({
-                                  eventType: event.id,
-                                  stepId: step.id,
-                                })
-                              }
-                            >
-                              Delete
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <>
+                    <p className="mb-3 text-sm text-muted-foreground">
+                      Drag rows to set run order.
+                    </p>
+                    <RoutineStepsSortableTable
+                      eventType={event.id}
+                      steps={steps}
+                      renderStepCell={renderStepCell}
+                      onReorder={(orderedIds) =>
+                        void reorderSteps(event.id, orderedIds)
+                      }
+                      onDelete={(stepId) =>
+                        setStepToDelete({ eventType: event.id, stepId })
+                      }
+                    />
+                  </>
                 )}
               </CardContent>
             </Card>

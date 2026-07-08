@@ -32,19 +32,27 @@ function effectAnimationClass(effectId: string): string {
   return "led-animate-pulse";
 }
 
-function effectBackground(
+function effectBackgroundStyle(
   effectId: string,
   brightnessPercent: number,
   rgb: Rgb,
-): string {
+): React.CSSProperties {
   if (effectId === "addressable_rainbow") {
-    return "linear-gradient(90deg, oklch(0.55 0.2 25), oklch(0.55 0.2 85), oklch(0.55 0.2 155), oklch(0.55 0.2 250), oklch(0.55 0.2 25))";
+    return {
+      backgroundImage:
+        "linear-gradient(90deg, oklch(0.55 0.2 25), oklch(0.55 0.2 85), oklch(0.55 0.2 155), oklch(0.55 0.2 250), oklch(0.55 0.2 25))",
+    };
   }
   if (effectId === "addressable_color_wipe") {
     const accent = rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent));
-    return `linear-gradient(90deg, oklch(0.12 0 0) 0%, oklch(0.12 0 0) 40%, ${accent} 50%, oklch(0.12 0 0) 60%, oklch(0.12 0 0) 100%)`;
+    return {
+      backgroundImage: `linear-gradient(90deg, oklch(0.12 0 0) 0%, oklch(0.12 0 0) 40%, ${accent} 50%, oklch(0.12 0 0) 60%, oklch(0.12 0 0) 100%)`,
+      backgroundSize: "200% 100%",
+    };
   }
-  return rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent));
+  return {
+    backgroundColor: rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent)),
+  };
 }
 
 function effectOpacity(effectId: string, brightnessPercent: number): number {
@@ -83,9 +91,7 @@ export function LedStripPreview({
             ),
           }
         : {
-            background: effectBackground(effectId, brightnessPercent, rgb),
-            backgroundSize:
-              effectId === "addressable_color_wipe" ? "200% 100%" : undefined,
+            ...effectBackgroundStyle(effectId, brightnessPercent, rgb),
             opacity: effectOpacity(effectId, brightnessPercent),
           };
 

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INTEGRATION_IDS } from "@/lib/integrations";
 import { sequenceStepSchema } from "@/lib/types";
 
 export const gateSchema = z.object({
@@ -17,9 +18,20 @@ export const eventSequenceSchema = z.object({
 });
 
 export const settingsSchema = z.object({
+  raceManagerProvider: z.enum(INTEGRATION_IDS).default("next"),
   nextWsUrl: z.string().min(1),
+  /** RotorHazard server (Socket.io); used when raceManagerProvider is rotorhazard */
+  rotorHazardUrl: z.string().min(1).default("http://rotorhazard.local:5000"),
   /** 1–100%; typical race strips run around 5% */
   defaultBrightnessPercent: z.number().int().min(1).max(100).default(5),
+});
+
+/** PATCH body — optional fields only, no defaults (avoids clobbering unrelated settings). */
+export const settingsPatchSchema = z.object({
+  raceManagerProvider: z.enum(INTEGRATION_IDS).optional(),
+  nextWsUrl: z.string().min(1).optional(),
+  rotorHazardUrl: z.string().min(1).optional(),
+  defaultBrightnessPercent: z.number().int().min(1).max(100).optional(),
 });
 
 export const configSchema = z.object({

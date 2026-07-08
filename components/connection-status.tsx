@@ -1,24 +1,39 @@
 "use client";
 
 import { useRaceSocket } from "@/hooks/use-race-socket";
+import { getIntegration } from "@/lib/integrations";
 import { cn } from "@/lib/utils";
 
 function ConnectionIndicator({
   label,
   ok,
+  muted,
+  title,
 }: {
   label: string;
   ok: boolean;
+  muted?: boolean;
+  title?: string;
 }) {
+  const defaultTitle = muted
+    ? `${label} — work in progress`
+    : ok
+      ? `${label} connected`
+      : `${label} disconnected`;
+
   return (
     <span
       className="inline-flex shrink-0 items-center gap-1 text-xs sm:gap-1.5 sm:text-sm"
-      title={ok ? `${label} connected` : `${label} disconnected`}
+      title={title ?? defaultTitle}
     >
       <span
         className={cn(
           "size-2 shrink-0 rounded-full",
-          ok ? "bg-status-ok" : "bg-status-muted",
+          muted
+            ? "bg-status-muted"
+            : ok
+              ? "bg-status-ok"
+              : "bg-status-muted",
         )}
         aria-hidden
       />
@@ -29,6 +44,9 @@ function ConnectionIndicator({
 
 export function ConnectionStatus() {
   const { connected, connection } = useRaceSocket();
+  const integration = getIntegration(connection.provider);
+  const label = integration?.label ?? connection.provider;
+  const isWip = connection.status === "wip";
 
   return (
     <div
@@ -37,7 +55,11 @@ export function ConnectionStatus() {
       data-testid="connection-status"
     >
       <ConnectionIndicator label="Socket" ok={connected} />
-      <ConnectionIndicator label="Next" ok={connection.nextConnected} />
+      <ConnectionIndicator
+        label={label}
+        ok={connection.connected}
+        muted={isWip}
+      />
     </div>
   );
 }

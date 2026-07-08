@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrightnessControl } from "@/components/brightness-control";
+import { GateTargetPicker } from "@/components/gate-target-picker";
 import { ColorSourcePicker } from "@/components/color-source-picker";
 import { EffectPicker, type EffectSelection } from "@/components/effect-picker";
 import { Button } from "@/components/ui/button";
@@ -121,15 +122,6 @@ export function RoutineStepWizard({
     if (stepKind === "action") return ["Type", "Target", "Action", "Configure"];
     return ["Type"];
   }, [stepKind]);
-
-  const targetItems = useMemo(
-    () => [
-      { value: "all", label: "All gates" },
-      { value: "start_gate", label: "Start gate" },
-      ...gates.map((g) => ({ value: `gate:${g.id}`, label: g.id })),
-    ],
-    [gates],
-  );
 
   useEffect(() => {
     if (!open) return;
@@ -292,7 +284,7 @@ export function RoutineStepWizard({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>Add step</DialogTitle>
           <DialogDescription>
@@ -371,24 +363,17 @@ export function RoutineStepWizard({
           {wizardStep === 1 && stepKind === "action" && (
             <div className="space-y-2">
               <Label>Which gates should respond?</Label>
-              <Select
+              <GateTargetPicker
+                gates={gates}
                 value={target}
-                onValueChange={(v) => v && setTarget(v)}
-                items={targetItems}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All gates</SelectItem>
-                  <SelectItem value="start_gate">Start gate</SelectItem>
-                  {gates.map((g) => (
-                    <SelectItem key={g.id} value={`gate:${g.id}`}>
-                      {g.id}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={setTarget}
+                getGateValue={(gate) => `gate:${gate.id}`}
+                extraOptions={[
+                  { value: "all", label: "All gates" },
+                  { value: "start_gate", label: "Start gate" },
+                ]}
+                ariaLabel="Which gates should respond"
+              />
             </div>
           )}
 

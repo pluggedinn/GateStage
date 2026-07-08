@@ -187,7 +187,7 @@ export default function DashboardPage() {
           <CardHeader>
             <CardTitle>Race events</CardTitle>
             <CardDescription>
-              From Next race director (mock or real)
+              From your race manager (mock or real)
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -198,7 +198,7 @@ export default function DashboardPage() {
                   <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
                     npm run dev:mocks
                   </code>{" "}
-                  and emit via mock Next HTTP API.
+                  and emit via the mock race manager HTTP API.
                 </p>
               ) : (
                 <>

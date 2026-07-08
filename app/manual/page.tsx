@@ -24,6 +24,7 @@ import {
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { defaultEffectSelection } from "@/lib/effects";
 import type { Gate } from "@/lib/config/schema";
+import { GateTargetPicker } from "@/components/gate-target-picker";
 import { cn } from "@/lib/utils";
 
 type StepCellProps = {
@@ -157,48 +158,19 @@ export default function ManualPage() {
               title="Select gate"
               description="Which gate strip are you controlling?"
             >
-              <div
-                className="flex flex-wrap gap-2"
-                role="radiogroup"
-                aria-label="Select gate"
-              >
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={isAllGates}
-                  disabled={gates.length === 0}
-                  title="Send to all enabled gates"
-                  className={cn(
-                    "min-h-11 rounded-full border px-4 text-sm font-medium transition-colors",
-                    isAllGates
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background hover:bg-muted",
-                    gates.length === 0 && "cursor-not-allowed opacity-50",
-                  )}
-                  onClick={() => setSelectedGateId("all")}
-                >
-                  All gates
-                </button>
-                {gates.map((g) => (
-                  <button
-                    key={g.id}
-                    type="button"
-                    role="radio"
-                    aria-checked={selectedGateId === g.id}
-                    title={g.host}
-                    className={cn(
-                      "min-h-11 rounded-full border px-4 font-mono text-sm font-medium tabular-nums transition-colors",
-                      selectedGateId === g.id
-                        ? "border-primary bg-primary text-primary-foreground"
-                        : "border-border bg-background hover:bg-muted",
-                      !g.enabled && "opacity-60",
-                    )}
-                    onClick={() => setSelectedGateId(g.id)}
-                  >
-                    {g.id}
-                  </button>
-                ))}
-              </div>
+              <GateTargetPicker
+                gates={gates}
+                value={selectedGateId}
+                onChange={setSelectedGateId}
+                extraOptions={[
+                  {
+                    value: "all",
+                    label: "All gates",
+                    title: "Send to all enabled gates",
+                    disabled: gates.length === 0,
+                  },
+                ]}
+              />
             </StepCell>
 
             <StepCell

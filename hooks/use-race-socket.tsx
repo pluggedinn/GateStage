@@ -8,20 +8,26 @@ import {
   type ReactNode,
 } from "react";
 import { io, type Socket } from "socket.io-client";
+import {
+  DEFAULT_INTEGRATION_ID,
+  type RaceManagerConnectionState,
+} from "@/lib/integrations";
 import type {
   RaceActionEnvelope,
   RaceEventEnvelope,
 } from "@/lib/types";
 
-type ConnectionState = {
-  nextConnected: boolean;
-};
-
 type RaceSocketValue = {
   events: RaceEventEnvelope[];
   actions: RaceActionEnvelope[];
-  connection: ConnectionState;
+  connection: RaceManagerConnectionState;
   connected: boolean;
+};
+
+const defaultConnectionState: RaceManagerConnectionState = {
+  provider: DEFAULT_INTEGRATION_ID,
+  connected: false,
+  status: "available",
 };
 
 const RaceSocketContext = createContext<RaceSocketValue | null>(null);
@@ -29,9 +35,8 @@ const RaceSocketContext = createContext<RaceSocketValue | null>(null);
 export function RaceSocketProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<RaceEventEnvelope[]>([]);
   const [actions, setActions] = useState<RaceActionEnvelope[]>([]);
-  const [connection, setConnection] = useState<ConnectionState>({
-    nextConnected: false,
-  });
+  const [connection, setConnection] =
+    useState<RaceManagerConnectionState>(defaultConnectionState);
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -48,7 +53,7 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
     socket.on("race:action", (action: RaceActionEnvelope) => {
       setActions((prev) => [action, ...prev].slice(0, 100));
     });
-    socket.on("connection:next", (state: ConnectionState) => {
+    socket.on("connection:raceManager", (state: RaceManagerConnectionState) => {
       setConnection(state);
     });
 

@@ -1,0 +1,24 @@
+---
+description: ESPHome CLI for flashing gate firmware — always use pyenv 3.11
+globs: docs/examples/**
+alwaysApply: false
+---
+
+# ESPHome flashing
+
+Use the **pyenv 3.11.4** install only. Do not create project venvs, install ESPHome via pip into other Python versions, or use `~/.local/bin/esphome` (3.10 / 2025.7.5 — missing `band_mode`).
+
+```bash
+ESPHOME="$HOME/.pyenv/versions/3.11.4/bin/esphome"
+cd docs/examples
+
+# USB or OTA (pass gate IP for OTA)
+$ESPHOME -s gate_id <id> run gate.yaml --device <ip-or-port> --no-logs
+
+# Or helper script (uses whatever `esphome` is on PATH — prefer explicit path above)
+./flash-gate.sh <id>
+```
+
+- `gate_id` is the suffix only: `1`, `2`, `6`, `start`, `finish` → `gate-<id>` via substitution.
+- Discover gates on LAN: GateStage `POST /api/gates/discover` or mDNS `_esphomelib._tcp`.
+- `gate.yaml` requires ESPHome **2026.x** for `band_mode: 5GHZ` (pyenv 3.11.4 has 2026.6.2).

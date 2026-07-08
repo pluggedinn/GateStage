@@ -134,11 +134,12 @@ export async function sendEsphomeCommand(
 
 export async function pingGate(host: string): Promise<boolean> {
   const base = hostBase(host);
+  const timeoutMs = Number(process.env.GATESTAGE_GATE_PING_TIMEOUT_MS ?? 5000);
   for (const path of ["/health", "/"]) {
     try {
       const res = await fetch(`${base}${path}`, {
         method: "GET",
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (res.ok) return true;
     } catch {
