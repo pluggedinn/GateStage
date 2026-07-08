@@ -77,7 +77,7 @@ flowchart TB
 - Runs **Next** ([go-next.co](https://go-next.co/)) — heats, pilots, frequencies, race flow, YouTube stream
 - Runs **GateStage** — listens to Next events, controls gates, serves web UI
 
-Both apps run on the **same machine**. GateStage connects to Next over localhost WebSocket (exact URL TBD — see open questions in HANDOFF.md).
+Both apps run on the **same machine**. GateStage connects to Next over localhost WebSocket (exact URL TBD — see open questions in [AGENTS.md](../AGENTS.md)).
 
 ### LED gates
 

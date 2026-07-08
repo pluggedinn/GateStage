@@ -366,7 +366,6 @@ Use `data-testid` on dashboard connection/event elements for E2E selectors.
 | [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) | Hardware, race WiFi, Nuclear Hazard, data flow diagrams |
 | [docs/DESIGN.md](./docs/DESIGN.md) | UI tokens, typography, anti-patterns |
 | [docs/ESPHOME.md](./docs/ESPHOME.md) | Gate firmware, wiring, REST endpoints |
-| [docs/HANDOFF.md](./docs/HANDOFF.md) | Historical planning notes (some terms outdated — prefer this file) |
 | [README.md](./README.md) | Human-facing quick start |
 
 ---
