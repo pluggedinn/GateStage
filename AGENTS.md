@@ -2,7 +2,7 @@
 
 **LED gate control for FPV whoop races.** Listens to [Next](https://go-next.co/) race events and drives ESPHome LED gates over the race LAN. Runs on the race director laptop; crew use browsers on the same WiFi.
 
-Canonical entry point for coding agents. Domain detail: `docs/ARCHITECTURE.md`, `docs/DESIGN.md`, `docs/ESPHOME.md`.
+Canonical entry point for coding agents. UI: `docs/DESIGN.md`. Gate firmware: `docs/ESPHOME.md`.
 
 ---
 

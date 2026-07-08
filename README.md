@@ -76,10 +76,17 @@ Export/import via `GET/POST /api/config`.
 ## Docs
 
 - [AGENTS.md](./AGENTS.md) — **start here for coding agents** (architecture, conventions, commands)
-- [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — hardware/network context
 - [DESIGN.md](./docs/DESIGN.md) — UI design system and semantic color tokens
 - [ESPHOME.md](./docs/ESPHOME.md) — gate firmware setup ([`docs/examples/gate.yaml`](./docs/examples/gate.yaml), XIAO ESP32-C5 + WS2811)
 
 ## Race environment
 
-See [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md). GateStage binds to `0.0.0.0` so crew on race WiFi can open `http://<rd-laptop-ip>:8080`. No login in v1 — trusted race LAN.
+GateStage runs on the **race director laptop** alongside [Next](https://go-next.co/). ESP32 gates join the **same 5 GHz race WiFi** as the laptop. Server binds to `0.0.0.0` so crew open `http://<rd-laptop-ip>:8080`. No login in v1 — trusted LAN.
+
+**Race day checklist**
+
+1. Race WiFi AP up (5 GHz; Channel 36 preferred — keeps WiFi away from analog VTX on Raceband)
+2. RD laptop on race WiFi; Next running and connected to the RotorHazard timer
+3. GateStage running; crew URL shared
+4. All ESP32 gates online on race WiFi (DHCP reservations help)
+5. Internet optional — timing and gate control work offline on the LAN
