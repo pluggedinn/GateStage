@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { BrightnessControl } from "@/components/brightness-control";
 import { ColorPicker } from "@/components/color-picker";
@@ -21,13 +21,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { defaultEffectSelection } from "@/lib/effects";
 import type { Gate } from "@/lib/config/schema";
@@ -78,14 +71,8 @@ export default function ManualPage() {
   );
   const [rgb, setRgb] = useState({ r: 255, g: 0, b: 0 });
 
-  const gateItems = useMemo(
-    () =>
-      gates.map((g) => ({
-        value: g.id,
-        label: `${g.id} (${g.host})`,
-      })),
-    [gates],
-  );
+  const isAllGates = selectedGateId === "all";
+  const hasGateSelection = Boolean(selectedGateId);
 
   const loadGates = useCallback(async () => {
     const res = await fetch("/api/gates");
@@ -115,14 +102,24 @@ export default function ManualPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(command),
     });
-    const data = (await res.json()) as { ok: boolean; status?: number };
+    const data = (await res.json()) as {
+      ok: boolean;
+      status?: number;
+      sent?: number;
+      failed?: number;
+    };
     if (data.ok) {
       toast.success("Command sent", {
-        description: `Gate ${selectedGateId}`,
+        description: isAllGates
+          ? `All gates (${data.sent ?? gates.length})`
+          : `Gate ${selectedGateId}`,
       });
     } else {
       toast.error("Command failed", {
-        description: `HTTP ${data.status ?? "error"}`,
+        description:
+          isAllGates && data.failed
+            ? `${data.failed} of ${data.sent} gates failed`
+            : `HTTP ${data.status ?? "error"}`,
       });
     }
   }
@@ -160,26 +157,48 @@ export default function ManualPage() {
               title="Select gate"
               description="Which gate strip are you controlling?"
             >
-              <Select
-                value={selectedGateId}
-                onValueChange={(v) => v && setSelectedGateId(v)}
-                items={gateItems}
+              <div
+                className="flex flex-wrap gap-2"
+                role="radiogroup"
+                aria-label="Select gate"
               >
-                <SelectTrigger className="h-11 min-h-11 w-full text-base *:data-[slot=select-value]:line-clamp-none">
-                  <SelectValue placeholder="Select gate" />
-                </SelectTrigger>
-                <SelectContent>
-                  {gates.map((g) => (
-                    <SelectItem
-                      key={g.id}
-                      value={g.id}
-                      className="font-mono text-base"
-                    >
-                      {g.id} ({g.host})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={isAllGates}
+                  disabled={gates.length === 0}
+                  title="Send to all enabled gates"
+                  className={cn(
+                    "min-h-11 rounded-full border px-4 text-sm font-medium transition-colors",
+                    isAllGates
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-background hover:bg-muted",
+                    gates.length === 0 && "cursor-not-allowed opacity-50",
+                  )}
+                  onClick={() => setSelectedGateId("all")}
+                >
+                  All gates
+                </button>
+                {gates.map((g) => (
+                  <button
+                    key={g.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={selectedGateId === g.id}
+                    title={g.host}
+                    className={cn(
+                      "min-h-11 rounded-full border px-4 font-mono text-sm font-medium tabular-nums transition-colors",
+                      selectedGateId === g.id
+                        ? "border-primary bg-primary text-primary-foreground"
+                        : "border-border bg-background hover:bg-muted",
+                      !g.enabled && "opacity-60",
+                    )}
+                    onClick={() => setSelectedGateId(g.id)}
+                  >
+                    {g.id}
+                  </button>
+                ))}
+              </div>
             </StepCell>
 
             <StepCell
@@ -219,17 +238,21 @@ export default function ManualPage() {
               <StepCell
                 step={3}
                 title="Turn off"
-                description="Send off to the selected gate"
+                description={
+                  isAllGates
+                    ? "Send off to all enabled gates"
+                    : "Send off to the selected gate"
+                }
                 className="sm:col-span-2 lg:col-span-1"
               >
                 <Button
                   size="lg"
                   variant="destructive"
                   className="min-h-11 w-full"
-                  disabled={!selectedGateId}
+                  disabled={!hasGateSelection}
                   onClick={() => void send({ kind: "off" })}
                 >
-                  Turn off gate
+                  {isAllGates ? "Turn off gates" : "Turn off gate"}
                 </Button>
               </StepCell>
             ) : (
@@ -266,7 +289,7 @@ export default function ManualPage() {
                   <Button
                     size="lg"
                     className="min-h-11 w-full shrink-0 md:w-auto md:min-w-36"
-                    disabled={!selectedGateId}
+                    disabled={!hasGateSelection}
                     onClick={() =>
                       void send({
                         kind: "effect",
@@ -310,7 +333,7 @@ export default function ManualPage() {
                   <Button
                     size="lg"
                     className="min-h-11 w-full shrink-0 sm:w-auto sm:min-w-36"
-                    disabled={!selectedGateId}
+                    disabled={!hasGateSelection}
                     onClick={() =>
                       void send({ kind: "rgb", ...rgb, brightnessPercent })
                     }
@@ -348,7 +371,9 @@ export default function ManualPage() {
                   : rgb
             }
             effectId={effect.effectId}
-            gateId={selectedGateId || undefined}
+            gateId={
+              isAllGates ? "All gates" : selectedGateId || undefined
+            }
             data-testid="led-strip-preview"
           />
         </div>
