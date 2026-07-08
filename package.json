@@ -1,7 +1,20 @@
 {
   "name": "gatestage",
   "version": "0.1.0",
-  "private": true,
+  "description": "LED gate control for FPV whoop races — listens to Next race events and drives ESPHome gates over the race LAN.",
+  "license": "MIT",
+  "author": "Riccardo Sonsini",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pluggedinn/GateStage.git"
+  },
+  "homepage": "https://github.com/pluggedinn/GateStage#readme",
+  "bugs": {
+    "url": "https://github.com/pluggedinn/GateStage/issues"
+  },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 ESPHOME_MOCK_FLEET=1 tsx watch --exclude data/** server.ts",
     "dev:server": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 ESPHOME_MOCK_FLEET=1 tsx server.ts",

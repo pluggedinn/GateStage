@@ -149,3 +149,7 @@ GateStage runs on the **race director laptop** alongside [Next](https://go-next.
 3. GateStage running; crew URL shared
 4. All ESP32 gates online on race WiFi (DHCP reservations help)
 5. Internet optional — timing and gate control work offline on the LAN
+
+## License
+
+MIT — see [LICENSE](./LICENSE).
