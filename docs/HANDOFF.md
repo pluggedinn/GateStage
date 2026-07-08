@@ -1,6 +1,8 @@
 # GateStage — Agent Handoff
 
-**Read this first.** This document captures everything decided in project planning so another agent (or developer) can implement GateStage without prior chat context.
+> **For day-to-day coding, start with [AGENTS.md](../AGENTS.md)** — it is the canonical, up-to-date agent guide. This file preserves historical planning context; some terms (e.g. "mappings") are outdated.
+
+This document captures everything decided in project planning so another agent (or developer) can implement GateStage without prior chat context.
 
 ---
 

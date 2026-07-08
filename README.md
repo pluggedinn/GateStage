@@ -75,10 +75,11 @@ Export/import via `GET/POST /api/config`.
 
 ## Docs
 
-- [HANDOFF.md](./docs/HANDOFF.md) — implementation guide for agents
-- [DESIGN.md](./docs/DESIGN.md) — UI design system and semantic color tokens
+- [AGENTS.md](./AGENTS.md) — **start here for coding agents** (architecture, conventions, commands)
 - [ARCHITECTURE.md](./docs/ARCHITECTURE.md) — hardware/network context
+- [DESIGN.md](./docs/DESIGN.md) — UI design system and semantic color tokens
 - [ESPHOME.md](./docs/ESPHOME.md) — gate firmware setup ([`docs/examples/gate.yaml`](./docs/examples/gate.yaml), XIAO ESP32-C5 + WS2811)
+- [HANDOFF.md](./docs/HANDOFF.md) — historical planning notes (superseded by AGENTS.md for day-to-day work)
 
 ## Race environment
 
