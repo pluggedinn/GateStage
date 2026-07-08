@@ -1,20 +1,38 @@
 # GateStage — ESPHome gate firmware (Seeed XIAO ESP32-C5)
 #
-# Flash one copy per gate. Change `esphome.name` for each device (gate-start,
-# gate-finish, etc.) — that name is the gate ID GateStage discovers via mDNS.
+# Flash one copy per gate. Pass `gate_id` at flash time (default "1" below):
+#   esphome -s gate_id 3 run gate.yaml
+#   ./flash-gate.sh 3
+# That sets esphome.name to gate-<id> — the gate ID GateStage discovers via mDNS.
 #
 # Hardware (default in this file):
 #   - Seeed XIAO ESP32-C5
-#   - WS2811 addressable strip, 60 LEDs, data on D8 (GPIO8)
+#   - WS2811 addressable strip, data on D8 (GPIO8)
 #   - 12 V strip PSU wired separately; ESP drives data only (share GND with PSU)
 #
+# LED count: firmware allocates STRIP_MAX_LEDS below (reflash to raise the ceiling).
+# Set how many pixels are lit via the "Active LEDs" REST number entity or web UI.
+#
 # Effects match `lib/effects.ts`: Pulse, Strobe, Color Wipe, Rainbow.
-# Rainbow speed/width are runtime-tunable via REST number entities.
+# All effects respect Active LEDs (shift/animate only the active range).
+# Rainbow speed/width and Pulse / Color Wipe params are runtime-tunable via REST.
+
+substitutions:
+  gate_id: "1"
 
 esphome:
-  name: gate-1
-  friendly_name: Gate 1
+  name: gate-${gate_id}
+  friendly_name: Gate ${gate_id}
   on_boot:
+    # Match runtime LED limit to the flashed strip buffer size.
+    - priority: -200
+      then:
+        - globals.set:
+            id: g_max_leds
+            value: !lambda |-
+              auto *out = id(gate_led).get_output();
+              if (out == nullptr) return 0;
+              return static_cast<esphome::light::AddressableLight *>(out)->size();
     # Restore runs in light setup(); re-apply after hardware is up (RMT strip).
     - priority: -100
       then:
@@ -22,6 +40,7 @@ esphome:
         - light.turn_on:
             id: gate_led
             transition_length: 0s
+        - script.execute: mask_inactive_leds
 
 esp32:
   board: esp32-c5-devkitc-1
@@ -48,7 +67,7 @@ wifi:
   fast_connect: false
   power_save_mode: none
   ap:
-    ssid: "GateStage-gate-1"
+    ssid: GateStage-gate-${gate_id}
     password: "tinywhoop"
 
 api:
@@ -59,10 +78,19 @@ ota:
 
 web_server:
   port: 80
+  version: 3
   local: true
 
-# Runtime Rainbow parameters (GateStage sets these via REST before turn_on)
+# Runtime strip + effect parameters (GateStage sets these via REST)
 globals:
+  - id: g_max_leds
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: g_active_leds
+    type: int
+    restore_value: true
+    initial_value: "60"
   - id: g_rainbow_speed
     type: int
     restore_value: false
@@ -71,8 +99,48 @@ globals:
     type: int
     restore_value: false
     initial_value: "50"
+  - id: g_pulse_transition_ms
+    type: int
+    restore_value: false
+    initial_value: "1000"
+  - id: g_pulse_update_ms
+    type: int
+    restore_value: false
+    initial_value: "1000"
+  - id: g_pulse_min_brightness
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: g_pulse_max_brightness
+    type: int
+    restore_value: false
+    initial_value: "100"
+  - id: g_wipe_interval_ms
+    type: int
+    restore_value: false
+    initial_value: "100"
+  - id: g_wipe_reverse
+    type: bool
+    restore_value: false
+    initial_value: "false"
 
 number:
+  - platform: template
+    name: "Active LEDs"
+    optimistic: true
+    min_value: 1
+    max_value: 400
+    step: 1
+    initial_value: 60
+    set_action:
+      - globals.set:
+          id: g_active_leds
+          value: !lambda |-
+            int v = (int) x;
+            if (v < 1) v = 1;
+            if (v > id(g_max_leds)) v = id(g_max_leds);
+            return v;
+      - script.execute: mask_inactive_leds
   - platform: template
     name: "FX Rainbow Speed"
     optimistic: true
@@ -95,6 +163,103 @@ number:
       - globals.set:
           id: g_rainbow_width
           value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Pulse Transition"
+    optimistic: true
+    min_value: 100
+    max_value: 30000
+    step: 100
+    initial_value: 1000
+    set_action:
+      - globals.set:
+          id: g_pulse_transition_ms
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Pulse Cycle Interval"
+    optimistic: true
+    min_value: 100
+    max_value: 30000
+    step: 100
+    initial_value: 1000
+    set_action:
+      - globals.set:
+          id: g_pulse_update_ms
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Pulse Min Brightness"
+    optimistic: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 0
+    set_action:
+      - globals.set:
+          id: g_pulse_min_brightness
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Pulse Max Brightness"
+    optimistic: true
+    min_value: 0
+    max_value: 100
+    step: 1
+    initial_value: 100
+    set_action:
+      - globals.set:
+          id: g_pulse_max_brightness
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Color Wipe Interval"
+    optimistic: true
+    min_value: 10
+    max_value: 5000
+    step: 10
+    initial_value: 100
+    set_action:
+      - globals.set:
+          id: g_wipe_interval_ms
+          value: !lambda "return (int) x;"
+
+switch:
+  - platform: template
+    name: "FX Color Wipe Reverse"
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - globals.set:
+          id: g_wipe_reverse
+          value: "true"
+    turn_off_action:
+      - globals.set:
+          id: g_wipe_reverse
+          value: "false"
+
+script:
+  - id: mask_inactive_leds
+    mode: restart
+    then:
+      - if:
+          condition:
+            lambda: 'return id(g_active_leds) < id(g_max_leds);'
+          then:
+            - light.addressable_set:
+                id: gate_led
+                range_from: !lambda "return id(g_active_leds);"
+                range_to: !lambda "return id(g_max_leds) - 1;"
+                red: 0%
+                green: 0%
+                blue: 0%
+
+interval:
+  # Solid-color tail mask only (effects clear their own inactive pixels).
+  - interval: 32ms
+    then:
+      - if:
+          condition:
+            lambda: |-
+              if (!id(gate_led).remote_values.is_on()) return false;
+              return id(gate_led).get_current_effect_index() == 0;
+          then:
+            - script.execute: mask_inactive_leds
 
 sensor:
   - platform: internal_temperature
@@ -106,13 +271,20 @@ light:
     id: gate_led
     name: "Gate LEDs"
     pin: GPIO8
-    num_leds: 60
+    # XIAO ESP32-C5 buffer ceiling (no PSRAM). Reflash after editing.
+    num_leds: 400
     rgb_order: RGB
     chipset: ws2811
     use_psram: false
     rmt_symbols: 96
     default_transition_length: 0s
     restore_mode: RESTORE_AND_ON
+    on_turn_off:
+      - lambda: |-
+          auto *out = static_cast<esphome::light::AddressableLight *>(id(gate_led).get_output());
+          if (out == nullptr) return;
+          out->all() = esphome::Color(0, 0, 0);
+          out->schedule_show();
     initial_state:
       state: true
       brightness: 5%
@@ -121,58 +293,146 @@ light:
       green: 0%
       blue: 0%
     effects:
-      - pulse:
+      - addressable_lambda:
           name: Pulse
-          transition_length: 1s
-          update_interval: 1s
-          min_brightness: 0%
-          max_brightness: 100%
-      - strobe:
+          update_interval: 50ms
+          lambda: |-
+            static uint32_t phase_origin = 0;
+            const int active = id(g_active_leds);
+            const int size = it.size();
+            const int count = active < size ? active : size;
+            if (count <= 0) return;
+            if (initial_run) {
+              phase_origin = millis();
+              it.range(0, count - 1) = esphome::Color(0, 0, 0);
+              if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+              return;
+            }
+            const uint32_t now = millis();
+            const uint32_t ramp_ms = (uint32_t) id(g_pulse_transition_ms);
+            const uint32_t hold_ms = (uint32_t) id(g_pulse_update_ms);
+            const uint32_t safe_ramp = ramp_ms < 1 ? 1 : ramp_ms;
+            const uint32_t safe_hold = hold_ms < 1 ? 1 : hold_ms;
+            const uint32_t cycle_ms = (safe_ramp + safe_hold) * 2;
+            const uint32_t cycle = (now - phase_origin) % cycle_ms;
+            const float min_b = id(g_pulse_min_brightness) / 100.0f;
+            const float max_b = id(g_pulse_max_brightness) / 100.0f;
+            float level = min_b;
+            if (cycle < safe_ramp) {
+              level = min_b + (max_b - min_b) * ((float) cycle / (float) safe_ramp);
+            } else if (cycle < safe_ramp + safe_hold) {
+              level = max_b;
+            } else if (cycle < safe_ramp * 2 + safe_hold) {
+              const uint32_t fall = cycle - safe_ramp - safe_hold;
+              level = max_b - (max_b - min_b) * ((float) fall / (float) safe_ramp);
+            } else {
+              level = min_b;
+            }
+            const uint8_t scale = (uint8_t) (level * 255.0f);
+            const esphome::Color lit = current_color * scale;
+            it.range(0, count - 1) = lit;
+            if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+      - addressable_lambda:
           name: Strobe
-          colors:
-            - state: true
-              brightness: 100%
-              red: 100%
-              green: 100%
-              blue: 100%
-              duration: 500ms
-            - state: false
-              duration: 250ms
-            - state: true
-              brightness: 100%
-              red: 100%
-              green: 0%
-              blue: 0%
-              duration: 500ms
+          update_interval: 16ms
+          lambda: |-
+            static uint32_t last_switch = 0;
+            static uint8_t at_color = 0;
+            const int active = id(g_active_leds);
+            const int size = it.size();
+            const int count = active < size ? active : size;
+            if (count <= 0) return;
+            if (initial_run) {
+              last_switch = millis();
+              at_color = 0;
+            }
+            const uint32_t now = millis();
+            const uint32_t durations[3] = {500, 250, 500};
+            if (now - last_switch >= durations[at_color]) {
+              at_color = (at_color + 1) % 3;
+              last_switch = now;
+            }
+            esphome::Color c(0, 0, 0);
+            if (at_color == 0) {
+              c = esphome::Color(255, 255, 255);
+            } else if (at_color == 2) {
+              c = esphome::Color(255, 0, 0);
+            }
+            it.range(0, count - 1) = c;
+            if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
       - addressable_lambda:
           name: Rainbow
           update_interval: 16ms
           lambda: |-
-            static uint32_t tick = 0;
             const int speed = id(g_rainbow_speed);
             const int width = id(g_rainbow_width);
+            const int active = id(g_active_leds);
             const int size = it.size();
             if (size == 0) return;
-            for (int i = 0; i < size; i++) {
-              float hue = fmodf((tick * speed * 6.0f / width) + (i * 360.0f / width), 360.0f);
-              esphome::light::ESPHSVColor hsv;
-              hsv.hue = (uint8_t) (hue * 255.0f / 360.0f);
-              hsv.saturation = 255;
-              hsv.value = 255;
+            const int count = active < size ? active : size;
+            const int safe_width = width < 1 ? 1 : width;
+            esphome::light::ESPHSVColor hsv;
+            hsv.saturation = 240;
+            hsv.value = 255;
+            uint16_t hue = (millis() * speed) % 0xFFFF;
+            const uint16_t add = 0xFFFF / safe_width;
+            for (int i = 0; i < count; i++) {
+              hsv.hue = hue >> 8;
               it[i] = hsv;
+              hue += add;
             }
-            tick++;
-      - addressable_color_wipe:
+            if (count < size) {
+              it.range(count, size - 1) = esphome::Color(0, 0, 0);
+            }
+      - addressable_lambda:
           name: Color Wipe
-          colors:
-            - red: 100%
-              green: 0%
-              blue: 0%
-              num_leds: 3
-              gradient: true
-            - red: 0%
-              green: 0%
-              blue: 100%
-              num_leds: 1
-          add_led_interval: 100ms
-          reverse: false
+          update_interval: 16ms
+          lambda: |-
+            static uint32_t last_add = 0;
+            static uint8_t at_color = 0;
+            static uint8_t leds_added = 0;
+            const int active = id(g_active_leds);
+            const int size = it.size();
+            const int count = active < size ? active : size;
+            if (count <= 0) return;
+            if (initial_run) {
+              last_add = 0;
+              at_color = 0;
+              leds_added = 0;
+              it.range(0, count - 1) = esphome::Color(0, 0, 0);
+              if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+              return;
+            }
+            const uint32_t now = millis();
+            const uint32_t interval_ms = (uint32_t) id(g_wipe_interval_ms);
+            const uint32_t safe_interval = interval_ms < 10 ? 10 : interval_ms;
+            if (now - last_add < safe_interval) return;
+            last_add = now;
+            const bool reverse = id(g_wipe_reverse);
+            if (reverse) {
+              for (int i = 0; i < count - 1; i++) {
+                it[i] = it[i + 1].get();
+              }
+            } else {
+              for (int i = count - 1; i > 0; i--) {
+                it[i] = it[i - 1].get();
+              }
+            }
+            esphome::Color esp_color(255, 0, 0);
+            const uint8_t seg_lens[2] = {3, 1};
+            if (at_color == 0) {
+              const uint8_t gradient = (uint8_t) (255.0f * ((float) leds_added / (float) seg_lens[0]));
+              esp_color = esp_color.gradient(esphome::Color(0, 0, 255), gradient);
+            } else {
+              esp_color = esphome::Color(0, 0, 255);
+            }
+            if (reverse) {
+              it[count - 1] = esp_color;
+            } else {
+              it[0] = esp_color;
+            }
+            if (++leds_added >= seg_lens[at_color]) {
+              leds_added = 0;
+              at_color = (at_color + 1) % 2;
+            }
+            if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);

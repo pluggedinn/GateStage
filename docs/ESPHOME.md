@@ -10,7 +10,9 @@ Full working example: [`docs/examples/gate.yaml`](./examples/gate.yaml)
 
 ```bash
 cd docs/examples
-esphome run gate.yaml
+esphome run gate.yaml              # defaults to gate-1
+esphome -s gate_id 3 run gate.yaml # flash as gate-3
+./flash-gate.sh 3                  # same, via helper script
 ```
 
 GateStage will discover the gate automatically once it is on the same LAN as the server.
@@ -20,7 +22,7 @@ GateStage will discover the gate automatically once it is on the same LAN as the
 | Item | Value |
 |------|-------|
 | Board | [Seeed XIAO ESP32-C5](https://wiki.seeedstudio.com/xiao_esp32c5_getting_started/) |
-| Strip | WS2811, 60 LEDs |
+| Strip | WS2811, 60 LEDs typical (400 max buffer in firmware) |
 | Data pin | **D8** → `GPIO8` |
 | Power | 12 V strip PSU (separate); ESP drives **data only** |
 | Networking | DHCP (no static IP in YAML) |
@@ -56,7 +58,7 @@ When a gate is in fallback AP mode, connect to `GateStage-<name>` and open **`ht
 - **Web UI** — turn LEDs on/off, pick colors and effects (same as on LAN)
 - **REST API** — the HTTP endpoints GateStage uses
 
-That is **not** full ESPHome reconfiguration: you cannot edit YAML or add new components from the browser. To change firmware (LED count, pins, effects), recompile and flash with ESPHome CLI/dashboard. GateStage will not discover the gate until it joins your LAN WiFi.
+That is **not** full ESPHome reconfiguration: you cannot edit YAML or add new components from the browser. To change firmware (strip buffer size in `num_leds`, pins, effects), recompile and flash. **Active LED count** is runtime-tunable (see below). GateStage will not discover the gate until it joins your LAN WiFi.
 
 ### `ap_timeout`
 
@@ -72,14 +74,26 @@ The sample uses a bare `api:` with no `encryption:` key. That is fine on a trust
 
 ### Gate ID = `esphome.name`
 
-Set a unique `name` per gate before flashing:
+The sample uses an ESPHome **substitution** so one YAML works for every gate:
 
 ```yaml
+substitutions:
+  gate_id: "1"   # default; override at flash time
+
 esphome:
-  name: gate-start    # ← GateStage gate id
+  name: gate-${gate_id}           # ← GateStage gate id (e.g. gate-3, gate-start)
+  friendly_name: Gate ${gate_id}
 ```
 
-Flash `gate-finish`, `gate-3`, etc. as separate devices with the same YAML except for `name` / `friendly_name`.
+Pass `gate_id` when flashing each physical device:
+
+```bash
+esphome -s gate_id start run gate.yaml   # → gate-start
+esphome -s gate_id finish run gate.yaml  # → gate-finish
+esphome -s gate_id 3 run gate.yaml       # → gate-3
+```
+
+The fallback AP SSID (`GateStage-gate-<id>`) uses the same substitution.
 
 ---
 
@@ -109,9 +123,20 @@ When GateStage runs an effect it:
 1. Sets runtime parameters via ESPHome **`number`** REST entities (`FX Rainbow Speed`, etc.) when supported
 2. Calls `POST /light/Gate%20LEDs/turn_on?effect=<name>`
 
-**Runtime-tunable** (REST number entities in sample YAML): Rainbow (`speed`, `width`).
+**Runtime-tunable** (REST number/switch entities or ESPHome web UI):
 
-**Firmware-only** (reflash to change): Pulse timing/brightness, Strobe colors, Color Wipe palette and direction. The UI still shows these fields so mappings store the intended values.
+| Entity | Effect / purpose |
+|--------|------------------|
+| Active LEDs | Strip length (all effects) |
+| FX Rainbow Speed / Width | Rainbow |
+| FX Pulse Transition / Cycle Interval / Min Brightness / Max Brightness | Pulse |
+| FX Color Wipe Interval / Reverse | Color Wipe |
+
+Strobe has no tunable parameters (fixed white → off → red sequence in firmware).
+
+All four effects only animate the active LED range; pixels above that stay off.
+
+**Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample), Strobe colors/timing.
 
 See [ESPHome light effects](https://esphome.io/components/light/index.html#light-effects) for parameter semantics.
 
@@ -128,11 +153,21 @@ GateStage sends brightness as **1–100%** in the UI, converted to ESPHome’s *
 Mappings and pilot-color automation without an explicit brightness use the race default.
 
 ```http
+POST http://192.168.4.21/number/Active%20LEDs/set?value=45
 POST http://192.168.4.21/number/FX%20Rainbow%20Speed/set?value=15
+POST http://192.168.4.21/number/FX%20Pulse%20Transition/set?value=800
+POST http://192.168.4.21/switch/FX%20Color%20Wipe%20Reverse/turn_on
+POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=None
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Rainbow
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?color_mode=rgb&r=255&g=0&b=0&brightness=200
 POST http://192.168.4.21/light/Gate%20LEDs/turn_off
 ```
+
+### Stopping an effect (ESPHome web UI)
+
+The built-in web UI at `http://<gate-ip>/` lists effects including **None**. Pick **None** to return to solid color (keeps the light on). Use the power toggle to turn the light fully off.
+
+If an effect seemed “stuck” on older firmware, the 32 ms inactive-LED mask was still writing to the strip even while an effect was running. Current firmware only runs that mask for solid color (no effect) and clears the strip on `turn_off`.
 
 DHCP is fine (no static IP required). Optional **DHCP reservation** on your router per gate keeps the host stable for debugging.
 
@@ -142,12 +177,14 @@ DHCP is fine (no static IP required). Optional **DHCP reservation** on your rout
 
 1. `cd docs/examples`
 2. Edit `wifi:` credentials in `gate.yaml` if needed
-3. Change `esphome.name` for each physical gate (`gate-start`, `gate-finish`, …)
-4. Adjust `num_leds`, `pin`, `chipset`, or `rgb_order` if your hardware differs
+3. Flash each physical gate with a unique `gate_id` (`start`, `finish`, `3`, …)
+4. Adjust `num_leds` (firmware buffer ceiling), `pin`, `chipset`, or `rgb_order` only if your hardware differs
 5. Flash with ESPHome CLI or dashboard (USB) or OTA after first flash
+6. Set **Active LEDs** via the ESPHome web UI or REST to match your physical strip length
 
 ```bash
-esphome run gate.yaml
+esphome -s gate_id start run gate.yaml
+# or: ./flash-gate.sh start
 ```
 
 ### Verify with GateStage
@@ -177,8 +214,8 @@ Native API actions (lower latency than REST) can be added later. GateStage v1 us
 
 ## Gate inventory (fill in per venue)
 
-| Gate ID (`esphome.name`) | Host (DHCP) | Start gate? | LED count | Board | Notes |
-|--------------------------|-------------|-------------|-----------|-------|-------|
-| gate-start | (auto / mDNS) | yes | 60 | XIAO ESP32-C5 | WS2811, D8 |
+| Gate ID (`esphome.name`) | Host (DHCP) | Start gate? | Active LEDs | Max buffer | Board | Notes |
+|--------------------------|-------------|-------------|-------------|------------|-------|-------|
+| gate-start | (auto / mDNS) | yes | 60 | 400 | XIAO ESP32-C5 | WS2811, D8 |
 
 GateStage picks up discovered gates automatically; mark the start gate in the Gates UI.
