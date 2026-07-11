@@ -11,7 +11,9 @@ import {
 import { describeEffectAction } from "@/lib/effects";
 import { type EsphomeCommand, sendEsphomeCommand } from "@/lib/esphome";
 import { ingestRaceEvent, resolvePilotColor } from "@/lib/heat-state";
+import type { RaceEventType } from "@/lib/race-events";
 import { describeDelayStep } from "@/lib/sequence-display";
+import { createTestRaceEvent } from "@/lib/test-race-event";
 import type {
   MappingAction,
   RaceActionEnvelope,
@@ -44,13 +46,48 @@ export class GateEngine {
     const sequence = getSequence(event.type);
     if (!sequence?.enabled || sequence.steps.length === 0) return;
 
+    await this.executeSequence(sequence.steps, event);
+  }
+
+  /**
+   * Manually run a routine for testing from the Routines UI.
+   * Ignores the enabled flag so disabled routines can still be previewed.
+   */
+  async runRoutine(
+    eventType: RaceEventType,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const sequence = getSequence(eventType);
+    if (!sequence) {
+      return { ok: false, error: "Routine not found" };
+    }
+    if (sequence.steps.length === 0) {
+      return { ok: false, error: "Routine has no steps" };
+    }
+
+    const event = createTestRaceEvent(eventType);
+
+    // Seed heat pilots so pilot-color actions resolve during a standalone test.
+    if (event.type !== "heat.loaded") {
+      ingestRaceEvent(createTestRaceEvent("heat.loaded"));
+    }
+
+    if (event.type === "pilot.crossing") {
+      lastCrossingByPilot.delete(event.pilot.id);
+    }
+
+    ingestRaceEvent(event);
+    await this.executeSequence(sequence.steps, event);
+    return { ok: true };
+  }
+
+  private async executeSequence(steps: SequenceStep[], event: RaceEvent) {
     const enabledGates = getGates().filter((g) => g.enabled);
 
-    for (const step of sequence.steps) {
+    for (const step of steps) {
       await this.runStep(step, event, enabledGates);
     }
 
-    const lastStep = sequence.steps[sequence.steps.length - 1];
+    const lastStep = steps[steps.length - 1];
     if (isChoreographyStep(lastStep)) {
       await this.turnOffAll(enabledGates);
     }
