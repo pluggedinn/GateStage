@@ -5,9 +5,8 @@
   "license": "MIT",
   "author": {
     "name": "Riccardo Sonsini",
-    "email": "riccardo@pluggedinn.dev"
+    "email": "ric.sonsini@gmail.com"
   },
-  "desktopName": "GateStage",
   "repository": {
     "type": "git",
     "url": "https://github.com/pluggedinn/GateStage.git"
