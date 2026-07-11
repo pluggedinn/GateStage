@@ -1,7 +1,7 @@
 <h1 align="center">GateStage</h1>
 
 <p align="center">
-  <a href="#"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-blue?style=flat-square" /></a>
+  <a href="#"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" /></a>
   <a href="https://go-next.co/"><img alt="Next RD" src="https://img.shields.io/badge/Next-race%20director-111?style=flat-square" /></a>
   <a href="https://esphome.io/"><img alt="ESPHome" src="https://img.shields.io/badge/ESPHome-LED%20gates-2E7DFF?style=flat-square" /></a>
 </p>
@@ -139,14 +139,30 @@ Export/import via `GET/POST /api/config`.
 | `npm run mock:esphome` | Six mock ESPHome REST servers (ports 9080–9085) |
 | `npm run mock:esphome:single` | One mock ESPHome server on port 9080 |
 | `npm run test:e2e` | Playwright E2E tests |
-| `npm run build` | Production build |
-| `npm run start` | Production server |
+| `npm run build` | Production Next build |
+| `npm run build:next` | Next standalone + bundled desktop server entry |
+| `npm run build:desktop` | Package installers for this OS (`dist/desktop/`) |
+| `npm run desktop` | Launch Electron UI (requires `build:next` first) |
+| `npm run start` | Production server (`tsx server.ts`) |
+| `npm run start:standalone` | Production server from `.next/standalone` |
+
+## Desktop releases
+
+GateStage also ships as installable **macOS / Windows / Linux** apps (Electron wrapping the same server).
+
+| Channel | How |
+|---------|-----|
+| **Nightly** | Every push to `main` → GitHub prerelease tag `nightly` |
+| **Stable** | Push a version tag (`git tag v0.2.0 && git push origin v0.2.0`) |
+
+See [docs/DESKTOP.md](./docs/DESKTOP.md).
 
 ## Documentation
 
 - [AGENTS.md](./AGENTS.md) — **start here for coding agents** (architecture, conventions, commands)
 - [docs/DESIGN.md](docs/DESIGN.md) — UI design system and semantic color tokens
 - [docs/ESPHOME.md](docs/ESPHOME.md) — gate firmware setup ([docs/examples/gate.yaml](docs/examples/gate.yaml), XIAO ESP32-C5 + WS2811)
+- [docs/DESKTOP.md](docs/DESKTOP.md) — Electron packaging and GitHub release pipelines
 
 ## Race environment
 

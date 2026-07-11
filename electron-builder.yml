@@ -1,0 +1,57 @@
+appId: com.gatestage.app
+productName: GateStage
+copyright: Copyright © GateStage contributors
+# Keep Node require paths intact for the standalone Next server tree.
+asar: false
+npmRebuild: false
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+directories:
+  output: dist/desktop
+  buildResources: desktop/build
+# Electron shell only — the Node server lives in extraResources/standalone.
+files:
+  - package.json
+  - desktop/main.cjs
+  - desktop/preload.cjs
+  - "!**/node_modules/**"
+extraResources:
+  - from: .next/standalone
+    to: standalone
+    filter:
+      - "**/*"
+      - "!**/*.map"
+      - "!**/node_modules/**"
+afterPack: scripts/after-pack.cjs
+extraMetadata:
+  main: desktop/main.cjs
+mac:
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  hardenedRuntime: true
+  gatekeeperAssess: false
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+linux:
+  category: Utility
+  target:
+    - AppImage
+    - deb
+  synopsis: LED gate control for FPV whoop races
+  description: >-
+    Listens to race manager events and drives ESPHome LED gates over the race LAN.
+publish:
+  provider: github
+  owner: pluggedinn
+  repo: GateStage

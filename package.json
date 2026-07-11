@@ -3,7 +3,10 @@
   "version": "0.1.0",
   "description": "LED gate control for FPV whoop races — listens to Next race events and drives ESPHome gates over the race LAN.",
   "license": "MIT",
-  "author": "Riccardo Sonsini",
+  "author": {
+    "name": "Riccardo Sonsini",
+    "email": "ric.sonsini@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/pluggedinn/GateStage.git"
@@ -12,6 +15,7 @@
   "bugs": {
     "url": "https://github.com/pluggedinn/GateStage/issues"
   },
+  "main": "desktop/main.cjs",
   "engines": {
     "node": ">=20"
   },
@@ -19,7 +23,11 @@
     "dev": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 tsx watch --exclude data/** server.ts",
     "dev:server": "PORT=8080 NEXT_WS_URL=ws://127.0.0.1:9400 tsx server.ts",
     "build": "next build",
+    "build:next": "next build && node scripts/prepare-standalone.mjs",
+    "build:desktop": "npm run build:next && electron-builder --config electron-builder.yml --publish never",
+    "desktop": "electron .",
     "start": "NODE_ENV=production PORT=8080 tsx server.ts",
+    "start:standalone": "NODE_ENV=production GATESTAGE_APP_DIR=.next/standalone PORT=8080 node .next/standalone/gatestage-server.cjs",
     "mock:next": "tsx mocks/next-ws-server.ts",
     "mock:esphome": "tsx mocks/esphome-mock-fleet.ts",
     "mock:esphome:single": "tsx mocks/esphome-mock-server.ts",
@@ -59,6 +67,9 @@
     "@types/react-dom": "^19",
     "@types/ws": "^8.18.1",
     "concurrently": "^10.0.3",
+    "electron": "^43.1.0",
+    "electron-builder": "^26.15.3",
+    "esbuild": "^0.28.1",
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5"
