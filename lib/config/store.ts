@@ -8,7 +8,7 @@ import {
   type Gate,
 } from "./schema";
 
-const dataDir = path.join(process.cwd(), "data");
+const dataDir = path.join(/* turbopackIgnore: true */ process.cwd(), "data");
 const configPath =
   process.env.GATESTAGE_CONFIG_PATH ?? path.join(dataDir, "config.json");
 const configTmpPath = `${configPath}.tmp`;

@@ -20,8 +20,10 @@ Test event: `curl -X POST http://127.0.0.1:9401/emit -H 'Content-Type: applicati
 | `npm run dev:mocks` | Full local stack (recommended) |
 | `npm run test:e2e` | Playwright (starts mocks automatically) |
 | `npm run lint` | Biome check |
+| `npm run build:next` | Next standalone + bundled `gatestage-server.cjs` |
+| `npm run build:desktop` | Electron installers → `dist/desktop/` |
 
-More commands and ports: [README.md](./README.md).
+More commands and ports: [README.md](./README.md). Desktop packaging: [docs/DESKTOP.md](./docs/DESKTOP.md).
 
 ---
 
@@ -120,6 +122,7 @@ Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-se
 | E2E test | `e2e/`, `e2e/helpers/mocks.ts` |
 | Gate firmware | `docs/examples/gate.yaml`, [docs/ESPHOME.md](./docs/ESPHOME.md) |
 | Visual / UI polish | [docs/DESIGN.md](./docs/DESIGN.md), `.cursor/skills/web-design-engineer/SKILL.md` |
+| Desktop packaging / releases | [docs/DESKTOP.md](./docs/DESKTOP.md), `desktop/`, `electron-builder.yml`, `.github/workflows/release-*.yml` |
 
 ---
 

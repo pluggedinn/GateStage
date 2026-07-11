@@ -1,0 +1,135 @@
+name: Release Stable
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build (e.g. v0.2.0). Leave empty when triggered by tag push."
+        required: false
+        type: string
+
+concurrency:
+  group: release-stable-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            electron_args: --mac
+          - os: windows-latest
+            electron_args: --win
+          - os: ubuntu-latest
+            electron_args: --linux
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libnss3 libatk-bridge2.0-0 libgtk-3-0 libgbm1 libasound2t64 \
+            rpm fakeroot
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Sync package version from tag
+        shell: bash
+        run: |
+          RAW_TAG="${{ inputs.tag || github.ref_name }}"
+          VERSION="${RAW_TAG#v}"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([.-].*)?$ ]]; then
+            echo "Tag must look like v1.2.3 (got: $RAW_TAG)"
+            exit 1
+          fi
+          echo "STABLE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=v${VERSION}" >> "$GITHUB_ENV"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Build Next standalone + Electron
+        run: npm run build:desktop -- ${{ matrix.electron_args }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: stable-${{ matrix.os }}
+          path: dist/desktop/
+          if-no-files-found: warn
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Resolve release tag
+        shell: bash
+        run: |
+          RAW_TAG="${{ inputs.tag || github.ref_name }}"
+          VERSION="${RAW_TAG#v}"
+          echo "RELEASE_TAG=v${VERSION}" >> "$GITHUB_ENV"
+          echo "STABLE_VERSION=${VERSION}" >> "$GITHUB_ENV"
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+
+      - name: Flatten artifacts
+        shell: bash
+        run: |
+          mkdir -p upload
+          find release-assets -type f \
+            \( -name '*.dmg' -o -name '*.exe' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.zip' \) \
+            -exec cp -n {} upload/ \;
+          ls -la upload
+
+      - name: Publish stable release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: GateStage ${{ env.RELEASE_TAG }}
+          prerelease: false
+          make_latest: true
+          generate_release_notes: true
+          body: |
+            Stable release **${{ env.RELEASE_TAG }}**.
+
+            Download the installer for your OS below. Installers are unsigned in v1 — macOS Gatekeeper / Windows SmartScreen may warn on first open.
+
+            Crew tablets still open `http://<rd-laptop-ip>:8080` on race WiFi.
+          files: upload/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
