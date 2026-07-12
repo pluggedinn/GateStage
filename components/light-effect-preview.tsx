@@ -4,7 +4,11 @@ import { cn } from "@/lib/utils";
 import type { EffectPreviewType } from "@/lib/effect-preview";
 import styles from "./light-effect-preview.module.css";
 
-const STRIP_TYPES = new Set<EffectPreviewType>(["rainbow", "color-wipe"]);
+const STRIP_TYPES = new Set<EffectPreviewType>([
+  "rainbow",
+  "color-wipe",
+  "comet",
+]);
 const PIXEL_COUNT = 20;
 
 type LightEffectPreviewProps = {
@@ -22,11 +26,13 @@ export function LightEffectPreview({
   const typeClass =
     type === "color-wipe"
       ? styles.colorWipe
-      : type === "rainbow"
-        ? styles.rainbow
-        : type === "strobe"
-          ? styles.strobe
-          : styles.pulse;
+      : type === "comet"
+        ? styles.comet
+        : type === "rainbow"
+          ? styles.rainbow
+          : type === "strobe"
+            ? styles.strobe
+            : styles.pulse;
 
   return (
     <span

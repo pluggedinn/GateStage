@@ -29,6 +29,9 @@ function effectAnimationClass(effectId: string): string {
   if (effectId === "addressable_color_wipe") {
     return "led-animate-scan";
   }
+  if (effectId === "addressable_comet") {
+    return "led-animate-scan";
+  }
   return "led-animate-pulse";
 }
 
@@ -50,13 +53,21 @@ function effectBackgroundStyle(
       backgroundSize: "200% 100%",
     };
   }
+  if (effectId === "addressable_comet") {
+    const dim = rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent));
+    const accent = rgbToHex(rgb);
+    return {
+      backgroundImage: `linear-gradient(90deg, ${dim} 0%, ${dim} 38%, ${accent} 50%, ${dim} 62%, ${dim} 100%)`,
+      backgroundSize: "200% 100%",
+    };
+  }
   return {
     backgroundColor: rgbToHex(applyBrightnessToRgb(rgb, brightnessPercent)),
   };
 }
 
 function effectOpacity(effectId: string, brightnessPercent: number): number {
-  if (effectId === "addressable_color_wipe") {
+  if (effectId === "addressable_color_wipe" || effectId === "addressable_comet") {
     return 1;
   }
   return Math.max(0.2, brightnessPercent / 100);
@@ -99,34 +110,28 @@ export function LedStripPreview({
     mode === "effect" ? effectAnimationClass(effectId) : undefined;
 
   return (
-    <div className={cn("space-y-2", className)} data-testid={testId}>
+    <div className={cn("space-y-1.5", className)} data-testid={testId}>
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        <span className="font-medium uppercase tracking-wide">Preview</span>
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="font-medium text-foreground">{label}</span>
+          {gateId ? (
+            <span className="font-mono tabular-nums">{gateId}</span>
+          ) : null}
+        </div>
+      </div>
       <div
-        className="rounded-xl border border-border bg-black/80 p-2"
+        className="rounded-md border border-border bg-black/80 p-1"
         role="img"
         aria-label={`LED preview: ${label}${gateId ? ` on ${gateId}` : ""}`}
       >
         <div
           className={cn(
-            "h-16 w-full rounded-lg shadow-inner ring-1 ring-white/10 sm:h-20",
+            "h-7 w-full rounded-sm shadow-inner ring-1 ring-white/10",
             animationClass,
           )}
           style={stripStyle}
         />
-        <div className="mt-1.5 flex gap-0.5 px-0.5">
-          {Array.from({ length: 12 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-1 flex-1 rounded-full bg-white/10"
-              aria-hidden
-            />
-          ))}
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{label}</span>
-        {gateId ? (
-          <span className="font-mono tabular-nums">{gateId}</span>
-        ) : null}
       </div>
     </div>
   );

@@ -116,7 +116,7 @@ GateStage and the sample gate firmware share the same effect catalog in **`lib/e
 | Category | Effects |
 |----------|---------|
 | **Basic** | Pulse, Strobe |
-| **Strip** | Rainbow, Color Wipe |
+| **Strip** | Rainbow, Color Wipe, Comet |
 
 When GateStage runs an effect it:
 
@@ -131,12 +131,13 @@ When GateStage runs an effect it:
 | FX Rainbow Speed / Width | Rainbow |
 | FX Pulse Transition / Cycle Interval / Min Brightness / Max Brightness | Pulse |
 | FX Color Wipe Interval / Reverse | Color Wipe |
+| FX Comet Width / Count / Interval / Max Brightness / Reverse | Comet |
 
-Strobe has no tunable parameters (fixed white → off → red sequence in firmware).
+Strobe has no tunable parameters (flashes the selected color on/off at 400ms). Color Wipe fills the active range with the selected color, then wipes to off.
 
-All four effects only animate the active LED range; pixels above that stay off.
+All five effects only animate the active LED range; pixels above that stay off.
 
-**Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample), Strobe colors/timing.
+**Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample), Strobe on/off timing.
 
 See [ESPHome light effects](https://esphome.io/components/light/index.html#light-effects) for parameter semantics.
 
@@ -157,8 +158,11 @@ POST http://192.168.4.21/number/Active%20LEDs/set?value=45
 POST http://192.168.4.21/number/FX%20Rainbow%20Speed/set?value=15
 POST http://192.168.4.21/number/FX%20Pulse%20Transition/set?value=800
 POST http://192.168.4.21/switch/FX%20Color%20Wipe%20Reverse/turn_on
+POST http://192.168.4.21/number/FX%20Comet%20Width/set?value=8
+POST http://192.168.4.21/number/FX%20Comet%20Count/set?value=3
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=None
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Rainbow
+POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Comet&color_mode=rgb&r=0&g=255&b=0&brightness=200
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?color_mode=rgb&r=255&g=0&b=0&brightness=200
 POST http://192.168.4.21/light/Gate%20LEDs/turn_off
 ```

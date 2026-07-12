@@ -127,7 +127,7 @@ export default function ManualPage() {
 
   return (
     <>
-      <div className="space-y-4 pb-40">
+      <div className="space-y-4 pb-24">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">
             Manual control
@@ -326,10 +326,7 @@ export default function ManualPage() {
         )}
         data-testid="manual-preview-dock"
       >
-        <div className="mx-auto w-full max-w-6xl px-4 py-3">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Preview
-          </p>
+        <div className="mx-auto w-full max-w-6xl px-4 py-2">
           <LedStripPreview
             mode={mode}
             brightnessPercent={brightnessPercent}
