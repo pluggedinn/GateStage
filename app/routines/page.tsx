@@ -1,5 +1,6 @@
 "use client";
 
+import { Play } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
@@ -25,6 +26,7 @@ import {
   describeStepTarget,
 } from "@/lib/sequence-display";
 import type { MappingAction, SequenceStep } from "@/lib/types";
+import { cn } from "@/lib/utils";
 
 export default function RoutinesPage() {
   const [sequences, setSequences] = useState<EventSequence[]>([]);
@@ -33,6 +35,7 @@ export default function RoutinesPage() {
     DEFAULT_BRIGHTNESS_PERCENT,
   );
   const [wizardEvent, setWizardEvent] = useState<RaceEventType | null>(null);
+  const [runningEvent, setRunningEvent] = useState<RaceEventType | null>(null);
   const [stepToDelete, setStepToDelete] = useState<{
     eventType: RaceEventType;
     stepId: string;
@@ -102,6 +105,29 @@ export default function RoutinesPage() {
     await load();
   }
 
+  async function runRoutine(eventType: RaceEventType) {
+    if (runningEvent) return;
+    setRunningEvent(eventType);
+    try {
+      const res = await fetch(
+        `/api/sequences/${encodeURIComponent(eventType)}/run`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        toast.error("Could not run routine", {
+          description: data.error ?? "Try again.",
+        });
+        return;
+      }
+      toast.success("Routine finished", { description: eventType });
+    } catch {
+      toast.error("Could not run routine");
+    } finally {
+      setRunningEvent(null);
+    }
+  }
+
   async function deleteStep(eventType: RaceEventType, stepId: string) {
     const res = await fetch(
       `/api/sequences/${encodeURIComponent(eventType)}/steps/${encodeURIComponent(stepId)}`,
@@ -115,10 +141,7 @@ export default function RoutinesPage() {
     await load();
   }
 
-  async function reorderSteps(
-    eventType: RaceEventType,
-    orderedIds: string[],
-  ) {
+  async function reorderSteps(eventType: RaceEventType, orderedIds: string[]) {
     const previous = sequences;
     const sequence = sequenceByEvent.get(eventType);
     if (!sequence) return;
@@ -130,9 +153,7 @@ export default function RoutinesPage() {
 
     setSequences(
       previous.map((s) =>
-        s.eventType === eventType
-          ? { ...s, steps: optimisticSteps }
-          : s,
+        s.eventType === eventType ? { ...s, steps: optimisticSteps } : s,
       ),
     );
 
@@ -248,6 +269,32 @@ export default function RoutinesPage() {
                       />
                     </div>
                   )}
+                  <Button
+                    size="icon-sm"
+                    variant="outline"
+                    disabled={steps.length === 0 || runningEvent !== null}
+                    aria-label={
+                      runningEvent === event.id
+                        ? `Running ${event.id}`
+                        : `Run ${event.id} routine`
+                    }
+                    title={
+                      steps.length === 0
+                        ? "Add steps before running"
+                        : runningEvent === event.id
+                          ? "Running…"
+                          : "Run routine"
+                    }
+                    data-testid={`run-routine-${event.id}`}
+                    onClick={() => void runRoutine(event.id)}
+                  >
+                    <Play
+                      className={cn(
+                        runningEvent === event.id && "animate-spin",
+                      )}
+                      fill="currentColor"
+                    />
+                  </Button>
                   <Button
                     size="sm"
                     variant="secondary"

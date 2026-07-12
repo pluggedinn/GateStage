@@ -1,56 +1,19 @@
+import {
+  createTestRaceEvent,
+  testHeat,
+  testPilots,
+} from "../../lib/test-race-event";
 import type { RaceEvent } from "../../lib/types";
 
-export const samplePilots = [
-  {
-    id: "pilot-1",
-    name: "Alpha",
-    color: { r: 255, g: 0, b: 0 },
-    seat: 1,
-  },
-  {
-    id: "pilot-2",
-    name: "Bravo",
-    color: { r: 0, g: 128, b: 255 },
-    seat: 2,
-  },
-  {
-    id: "pilot-3",
-    name: "Charlie",
-    color: { r: 0, g: 255, b: 0 },
-    seat: 3,
-  },
-] as const;
-
-export const sampleHeat = {
-  id: "heat-1",
-  name: "Round 1 · Heat 3",
-  round: 1,
-};
+export const samplePilots = testPilots;
+export const sampleHeat = testHeat;
 
 export const raceEventFixtures: Record<string, RaceEvent> = {
-  "heat.loaded": {
-    type: "heat.loaded",
-    heat: sampleHeat,
-    pilots: [...samplePilots],
-  },
-  "heat.arm_started": {
-    type: "heat.arm_started",
-    heat: sampleHeat,
-  },
-  "heat.go": {
-    type: "heat.go",
-    heat: sampleHeat,
-  },
-  "heat.finished": {
-    type: "heat.finished",
-    heat: sampleHeat,
-  },
-  "pilot.crossing": {
-    type: "pilot.crossing",
-    pilot: samplePilots[0],
-    crossing: { lap: 1, node: "start" },
-    heat: sampleHeat,
-  },
+  "heat.loaded": createTestRaceEvent("heat.loaded"),
+  "heat.arm_started": createTestRaceEvent("heat.arm_started"),
+  "heat.go": createTestRaceEvent("heat.go"),
+  "heat.finished": createTestRaceEvent("heat.finished"),
+  "pilot.crossing": createTestRaceEvent("pilot.crossing"),
 };
 
 /** Typical race sequence with delays in ms between events */
