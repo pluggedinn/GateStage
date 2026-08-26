@@ -1,6 +1,6 @@
 import WebSocket from "ws";
 import { logger } from "@/lib/logger";
-import { type RaceEvent, raceEventSchema } from "@/lib/types";
+import { translateNextMessage } from "./next-events";
 import type { AdapterCallbacks, RaceManagerAdapter } from "./types";
 
 const RECONNECT_MS = 3000;
@@ -8,10 +8,10 @@ const RECONNECT_MS = 3000;
 /**
  * Next race director adapter.
  *
- * Next broadcasts race events over a raw WebSocket in a shape that already
- * matches our internal {@link raceEventSchema}, so this adapter is a thin
- * connect + validate + forward layer. Other providers (RotorHazard, Trackside)
- * need real translation; see their adapters.
+ * Next broadcasts race events over a raw WebSocket (`ws://localhost:5702`) in
+ * its own wire format (`arm` / `start` / `finish` / `lastcall` / `pilot`).
+ * This adapter translates those envelopes into the shared race-event model.
+ * Other providers (RotorHazard, Trackside) have their own translators.
  */
 export class NextAdapter implements RaceManagerAdapter {
   readonly provider = "next" as const;
@@ -111,13 +111,12 @@ export class NextAdapter implements RaceManagerAdapter {
       return;
     }
 
-    const result = raceEventSchema.safeParse(parsed);
-    if (!result.success) {
-      logger.warn("next-adapter", `invalid event: ${result.error.message}`);
+    const event = translateNextMessage(parsed);
+    if (!event) {
+      logger.warn("next-adapter", `unrecognized event: ${raw.slice(0, 200)}`);
       return;
     }
 
-    const event: RaceEvent = result.data;
     this.callbacks.onEvent(event);
   }
 }

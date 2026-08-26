@@ -212,14 +212,10 @@ export default function SettingsPage() {
                   id="next-ws-url"
                   value={nextWsUrl}
                   onChange={(e) => setNextWsUrl(e.target.value)}
-                  placeholder="ws://127.0.0.1:9400"
+                  placeholder="ws://localhost:5702"
                   className="font-mono"
                   disabled={loading}
                 />
-                <p className="text-sm text-muted-foreground">
-                  Where GateStage listens for race events from the Next desktop
-                  app
-                </p>
               </div>
             </div>
           )}

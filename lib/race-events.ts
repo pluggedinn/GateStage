@@ -30,6 +30,11 @@ export const RACE_EVENT_TYPES: readonly RaceEventDef[] = [
     description: "Heat completed",
   },
   {
+    id: "heat.last_call",
+    label: "Last call to track",
+    description: "Pulse last-call cue (Next only; Pulse must be enabled)",
+  },
+  {
     id: "pilot.crossing",
     label: "Pilot crossing",
     description: "A pilot crossed the timing gate",

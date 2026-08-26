@@ -53,6 +53,7 @@ Tailwind utilities: `text-status-ok`, `bg-status-warn`, `border-status-error`, e
 |-------|-------------|
 | `heat.go` | `status-ok` |
 | `heat.arm_started` | `status-warn` |
+| `heat.last_call` | `status-warn` |
 | `heat.loaded` | `foreground` / muted |
 | `heat.finished` | `status-error` or muted |
 | `pilot.crossing` | `status-ok` (pilot color follows payload in Phase C+) |

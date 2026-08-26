@@ -45,6 +45,11 @@ export const raceEventSchema = z.discriminatedUnion("type", [
     heat: heatInfoSchema,
   }),
   z.object({
+    type: z.literal("heat.last_call"),
+    seconds: z.number().int().optional(),
+    heat: heatInfoSchema.optional(),
+  }),
+  z.object({
     type: z.literal("pilot.crossing"),
     pilot: pilotSchema,
     crossing: crossingInfoSchema,

@@ -20,6 +20,7 @@ export function getEventStatus(eventType: string): EventStatusToken {
     case "pilot.crossing":
       return "ok";
     case "heat.arm_started":
+    case "heat.last_call":
       return "warn";
     case "heat.finished":
       return "error";
