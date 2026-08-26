@@ -1,4 +1,5 @@
 import type { Socket, Server as SocketServer } from "socket.io";
+import type { GateHealthEvent, GateHealthSnapshot } from "./gate-health";
 import type { RaceManagerConnectionState } from "./integrations";
 import type { RaceActionEnvelope, RaceEventEnvelope } from "./types";
 
@@ -42,8 +43,16 @@ export class Broadcaster {
     this.io?.emit("config:updated");
   }
 
-  emitGateHealth(gateId: string, online: boolean) {
-    this.io?.emit("gate:health", { gateId, online });
+  emitGateHealth(event: GateHealthEvent) {
+    this.io?.emit("gate:health", event);
+  }
+
+  emitGateHealthSnapshot(snapshot: GateHealthSnapshot, socket?: Socket) {
+    if (socket) {
+      socket.emit("gate:health:snapshot", snapshot);
+      return;
+    }
+    this.io?.emit("gate:health:snapshot", snapshot);
   }
 
   emitRaceManagerConnection(state: RaceManagerConnectionState) {

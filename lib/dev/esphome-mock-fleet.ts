@@ -19,3 +19,15 @@ export function esphomeMockFleetHosts(): { id: string; host: string }[] {
     host: `127.0.0.1:${gate.port}`,
   }));
 }
+
+/** Stable fake telemetry so the Gates table is visually distinct in mocks. */
+export function mockGateTelemetry(id: string): { rssi: number; tC: number } {
+  const index = Math.max(
+    0,
+    ESPHOME_MOCK_FLEET.findIndex((gate) => gate.id === id),
+  );
+  return {
+    rssi: -48 - index * 6,
+    tC: 40 + index * 2.5,
+  };
+}

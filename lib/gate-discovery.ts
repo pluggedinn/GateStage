@@ -1,45 +1,14 @@
-import { Bonjour, type Service } from "bonjour-service";
-import {
-  type MergeDiscoveryResult,
-  mergeDiscoveredGates,
+import type {
+  DiscoveredGateSummary,
+  MergeDiscoveryResult,
 } from "@/lib/config/store";
 import { esphomeMockFleetHosts } from "@/lib/dev/esphome-mock-fleet";
-import { pingGate } from "@/lib/esphome";
-import { logger } from "@/lib/logger";
+import { runPresenceScan } from "@/lib/gate-presence";
 
-export type DiscoveredGate = {
-  id: string;
-  host: string;
-  source: "mdns" | "env";
-};
+export type DiscoveredGate = DiscoveredGateSummary;
 
-const DEFAULT_SCAN_MS = Number(
-  process.env.GATESTAGE_DISCOVERY_TIMEOUT_MS ?? 5000,
-);
-const WEB_SERVER_PORT = Number(process.env.GATESTAGE_ESPHOME_HTTP_PORT ?? 80);
-
-function normalizeGateId(name: string): string {
-  const base = name.split(".")[0] ?? name;
-  return base.trim().replace(/\s+/g, "-").toLowerCase();
-}
-
-function serviceToGate(service: Service): DiscoveredGate | null {
-  const id = normalizeGateId(service.name);
-  const ipv4 =
-    service.addresses?.find((addr) => addr.includes(".")) ??
-    (service.referer?.family === "IPv4" ? service.referer.address : undefined);
-
-  if (!id || !ipv4) return null;
-
-  return {
-    id,
-    host: `${ipv4}:${WEB_SERVER_PORT}`,
-    source: "mdns",
-  };
-}
-
-function gatesFromEnv(): DiscoveredGate[] {
-  const gates: DiscoveredGate[] = [];
+export function gatesFromEnv(): DiscoveredGateSummary[] {
+  const gates: DiscoveredGateSummary[] = [];
 
   if (process.env.ESPHOME_MOCK_FLEET === "1") {
     for (const gate of esphomeMockFleetHosts()) {
@@ -73,55 +42,6 @@ function gatesFromEnv(): DiscoveredGate[] {
   return gates;
 }
 
-async function verifyDiscovered(
-  candidates: Map<string, DiscoveredGate>,
-): Promise<DiscoveredGate[]> {
-  const verified: DiscoveredGate[] = [];
-
-  for (const gate of candidates.values()) {
-    if (await pingGate(gate.host)) {
-      verified.push(gate);
-    } else {
-      logger.warn("discovery", `unreachable ${gate.id} @ ${gate.host}`);
-    }
-  }
-
-  return verified.sort((a, b) => a.id.localeCompare(b.id));
-}
-
-async function discoverGates(
-  timeoutMs = DEFAULT_SCAN_MS,
-): Promise<DiscoveredGate[]> {
-  const candidates = new Map<string, DiscoveredGate>();
-
-  for (const gate of gatesFromEnv()) {
-    candidates.set(gate.id, gate);
-  }
-
-  await new Promise<void>((resolve) => {
-    const bonjour = new Bonjour();
-    const browser = bonjour.find({ type: "esphomelib", protocol: "tcp" });
-
-    const finish = () => {
-      browser.stop();
-      bonjour.destroy();
-      resolve();
-    };
-
-    browser.on("up", (service) => {
-      const gate = serviceToGate(service);
-      if (gate) candidates.set(gate.id, gate);
-    });
-
-    setTimeout(finish, timeoutMs);
-  });
-
-  return verifyDiscovered(candidates);
-}
-
-export async function syncGatesFromNetwork(
-  timeoutMs?: number,
-): Promise<MergeDiscoveryResult> {
-  const discovered = await discoverGates(timeoutMs);
-  return mergeDiscoveredGates(discovered);
+export async function syncGatesFromNetwork(): Promise<MergeDiscoveryResult> {
+  return runPresenceScan(gatesFromEnv());
 }

@@ -1,6 +1,6 @@
 # GateStage — ESPHome Gate Configuration
 
-Recommended firmware for each LED gate. GateStage discovers gates via **mDNS** (`_esphomelib._tcp`) and controls them over **HTTP REST** (`web_server`).
+Recommended firmware for each LED gate. GateStage discovers gates via a **UDP beacon** on port **9420** and controls them over **HTTP REST** (`web_server`). Firmware still includes `mdns:` so ESPHome OTA and `gate-start.local` work in a browser — GateStage does not browse mDNS.
 
 ---
 
@@ -15,7 +15,7 @@ esphome -s gate_id 3 run gate.yaml # flash as gate-3
 ./flash-gate.sh 3                  # same, via helper script
 ```
 
-GateStage will discover the gate automatically once it is on the same LAN as the server.
+GateStage will add the gate when it hears its UDP beacon (usually within a few seconds of joining WiFi).
 
 ### Reference hardware (sample defaults)
 
@@ -103,9 +103,21 @@ The fallback AP SSID (`GateStage-gate-<id>`) uses the same substitution.
 |-----------|-----|
 | `wifi` + `band_mode: 5GHZ` | Race LAN is 5 GHz only |
 | `wifi.ap` + `ap_timeout` | Setup hotspot when race WiFi is down |
-| `mdns` | Auto-discovery (enabled by default; kept explicit in sample) |
+| `mdns` | ESPHome OTA / `*.local` only (GateStage does not query it) |
+| `udp` port **9420** | Presence beacon + WHO reply |
+| `wifi_signal` / `internal_temperature` | RSSI and chip temp in the beacon |
 | `web_server` port 80 | GateStage HTTP commands |
 | `light` named **`Gate LEDs`** | Fixed entity name GateStage calls |
+
+### UDP beacon
+
+Every ~3s (and on WiFi connect / WHO) the gate broadcasts to `255.255.255.255:9420`:
+
+```json
+{"v":1,"id":"gate-start","rssi":-62,"tC":47.5}
+```
+
+GateStage learns `host` from the **sender IP**. Scan Now broadcasts `{"v":1,"q":"who"}` on the same port; gates reply with a beacon.
 
 ---
 
@@ -194,7 +206,7 @@ esphome -s gate_id start run gate.yaml
 ### Verify with GateStage
 
 1. Start GateStage on a machine on the **same WiFi** as the gate
-2. Open **Gates** — the gate should appear within ~15 s (background mDNS scan), or run `POST /api/gates/discover`
+2. Open **Gates** — a flashed gate should appear within a few seconds (UDP beacon), or run `POST /api/gates/discover`
 3. Mark **gate-start** as the start gate
 4. Use **Test** (rainbow) or **Manual** to confirm LEDs respond
 
@@ -220,6 +232,6 @@ Native API actions (lower latency than REST) can be added later. GateStage v1 us
 
 | Gate ID (`esphome.name`) | Host (DHCP) | Start gate? | Active LEDs | Max buffer | Board | Notes |
 |--------------------------|-------------|-------------|-------------|------------|-------|-------|
-| gate-start | (auto / mDNS) | yes | 60 | 400 | XIAO ESP32-C5 | WS2811, D8 |
+| gate-start | (auto / UDP beacon) | yes | 60 | 400 | XIAO ESP32-C5 | WS2811, D8 |
 
 GateStage picks up discovered gates automatically; mark the start gate in the Gates UI.

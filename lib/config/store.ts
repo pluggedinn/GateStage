@@ -10,16 +10,21 @@ import {
 } from "./schema";
 
 const dataDir = path.join(/* turbopackIgnore: true */ process.cwd(), "data");
-const configPath =
-  process.env.GATESTAGE_CONFIG_PATH ?? path.join(dataDir, "config.json");
-const configTmpPath = `${configPath}.tmp`;
+
+function resolveConfigPath() {
+  return process.env.GATESTAGE_CONFIG_PATH ?? path.join(dataDir, "config.json");
+}
+
+function resolveConfigTmpPath() {
+  return `${resolveConfigPath()}.tmp`;
+}
 
 let cached: Config | null = null;
 let cachedMtimeMs: number | null = null;
 
 function configMtimeMs(): number | null {
   try {
-    return fs.statSync(configPath).mtimeMs;
+    return fs.statSync(resolveConfigPath()).mtimeMs;
   } catch {
     return null;
   }
@@ -27,7 +32,7 @@ function configMtimeMs(): number | null {
 
 /** Always prefer disk when it changed — avoids stale module caches overwriting sequences. */
 function loadConfigFromDisk(): Config {
-  if (!fs.existsSync(configPath)) {
+  if (!fs.existsSync(resolveConfigPath())) {
     const seeded = defaultConfig();
     writeConfigFile(seeded);
     cached = seeded;
@@ -40,7 +45,7 @@ function loadConfigFromDisk(): Config {
     return cached;
   }
 
-  const raw = fs.readFileSync(configPath, "utf8");
+  const raw = fs.readFileSync(resolveConfigPath(), "utf8");
   const parsed = configSchema.parse(JSON.parse(raw));
   cached = parsed;
   cachedMtimeMs = mtimeMs;
@@ -48,15 +53,12 @@ function loadConfigFromDisk(): Config {
 }
 
 function defaultConfig(): Config {
-  const nextWsUrl = process.env.NEXT_WS_URL ?? "ws://127.0.0.1:9400";
-
   return {
     version: 2,
     settings: {
       raceManagerProvider: "next",
-      nextWsUrl,
-      rotorHazardUrl:
-        process.env.ROTORHAZARD_URL ?? "http://rotorhazard.local:5000",
+      nextWsUrl: "ws://127.0.0.1:9400",
+      rotorHazardUrl: "http://rotorhazard.local:5000",
       defaultBrightnessPercent: 5,
     },
     gates: [],
@@ -65,17 +67,21 @@ function defaultConfig(): Config {
 }
 
 function writeConfigFile(config: Config) {
+  const configPath = resolveConfigPath();
   const dir = path.dirname(configPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
   const json = JSON.stringify(config, null, 2);
-  fs.writeFileSync(configTmpPath, json, "utf8");
-  fs.renameSync(configTmpPath, configPath);
+  const tmpPath = resolveConfigTmpPath();
+  fs.writeFileSync(tmpPath, json, "utf8");
+  fs.renameSync(tmpPath, configPath);
 }
 
 export function initConfig(): Config {
-  return loadConfigFromDisk();
+  const config = loadConfigFromDisk();
+  snapshotGates(config.gates);
+  return config;
 }
 
 export function getConfig(): Config {
@@ -221,33 +227,100 @@ export type MergeDiscoveryResult = {
 export type DiscoveredGateSummary = {
   id: string;
   host: string;
-  source: "mdns" | "env";
+  source: "udp" | "env";
 };
 
-const DISCOVERY_MAX_MISSED_SCANS = Number(
-  process.env.GATESTAGE_DISCOVERY_MAX_MISSES ?? 3,
-);
+/** Last-known gate metadata — used if a forgotten id beacons again as a new row. */
+const GLOBAL_DISCOVERY_KEY = "__gatestage_gate_discovery__";
 
-/** Last-known gate metadata — survives brief discovery dropouts. */
-const lastKnownById = new Map<string, Gate>();
-const missedScansById = new Map<string, number>();
-let rememberedStartGateId: string | null = null;
+type DiscoveryMemory = {
+  lastKnownById: Map<string, Gate>;
+  rememberedStartGateId: string | null;
+};
+
+function discoveryMemory(): DiscoveryMemory {
+  const globalStore = globalThis as typeof globalThis & {
+    [GLOBAL_DISCOVERY_KEY]?: DiscoveryMemory;
+  };
+  if (!globalStore[GLOBAL_DISCOVERY_KEY]) {
+    globalStore[GLOBAL_DISCOVERY_KEY] = {
+      lastKnownById: new Map(),
+      rememberedStartGateId: null,
+    };
+  }
+  return globalStore[GLOBAL_DISCOVERY_KEY];
+}
 
 function syncRememberedStartGateFromGates(gates: Gate[]) {
+  const mem = discoveryMemory();
   const start = gates.find((g) => g.isStartGate);
-  if (start) rememberedStartGateId = start.id;
+  mem.rememberedStartGateId = start?.id ?? mem.rememberedStartGateId;
 }
 
 function snapshotGates(gates: Gate[]) {
+  const mem = discoveryMemory();
+  mem.lastKnownById.clear();
   for (const gate of gates) {
-    lastKnownById.set(gate.id, structuredClone(gate));
+    mem.lastKnownById.set(gate.id, structuredClone(gate));
   }
   syncRememberedStartGateFromGates(gates);
 }
 
-/** Called when the user explicitly sets the start gate in the UI. */
-export function rememberStartGateId(id: string) {
-  rememberedStartGateId = id;
+function startFlagsEqual(a: Gate[], b: Gate[]): boolean {
+  if (a.length !== b.length) return false;
+  const bById = new Map(b.map((g) => [g.id, g]));
+  for (const gate of a) {
+    if (gate.isStartGate !== Boolean(bById.get(gate.id)?.isStartGate)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** Called when the user explicitly sets or clears the start gate in the UI. */
+export function rememberStartGateId(id: string | null) {
+  discoveryMemory().rememberedStartGateId = id;
+}
+
+/** Test helper — clears in-memory discovery state. */
+export function resetDiscoveryMemory() {
+  const mem = discoveryMemory();
+  mem.lastKnownById.clear();
+  mem.rememberedStartGateId = null;
+  cached = null;
+  cachedMtimeMs = null;
+}
+
+export function forgetGate(id: string): Gate[] {
+  const existing = getGate(id);
+  if (!existing) {
+    throw new Error("Gate not found");
+  }
+
+  const mem = discoveryMemory();
+  mem.lastKnownById.delete(id);
+  const wasStart = existing.isStartGate || mem.rememberedStartGateId === id;
+
+  saveConfig((config) => {
+    let gates = config.gates.filter((g) => g.id !== id);
+    if (wasStart && gates.length > 0 && !gates.some((g) => g.isStartGate)) {
+      const first = [...gates].sort((a, b) => a.sortOrder - b.sortOrder)[0];
+      if (first) {
+        gates = gates.map((g) => ({
+          ...g,
+          isStartGate: g.id === first.id,
+        }));
+        mem.rememberedStartGateId = first.id;
+      }
+    } else if (wasStart && gates.length === 0) {
+      mem.rememberedStartGateId = null;
+    }
+    return { ...config, gates };
+  });
+
+  const gates = getGates();
+  snapshotGates(gates);
+  return gates;
 }
 
 export function mergeDiscoveredGates(
@@ -255,26 +328,25 @@ export function mergeDiscoveredGates(
 ): MergeDiscoveryResult {
   const previous = getGates();
   snapshotGates(previous);
+  const previousWasEmpty = previous.length === 0;
+  const mem = discoveryMemory();
 
-  const discoveredIds = new Set(discovered.map((d) => d.id));
   const added: string[] = [];
   const updated: string[] = [];
   const removed: string[] = [];
 
-  const maxSortOrder = previous.reduce(
-    (max, gate) => Math.max(max, gate.sortOrder),
-    -1,
-  );
-  let nextSortOrder = maxSortOrder + 1;
-
   const merged = new Map<string, Gate>();
+  for (const gate of previous) {
+    merged.set(gate.id, gate);
+  }
+
+  let nextSortOrder =
+    previous.reduce((max, gate) => Math.max(max, gate.sortOrder), -1) + 1;
 
   for (const item of discovered) {
-    const existing =
-      previous.find((g) => g.id === item.id) ?? lastKnownById.get(item.id);
+    const existing = merged.get(item.id) ?? mem.lastKnownById.get(item.id);
 
     if (existing) {
-      const prevMisses = missedScansById.get(item.id) ?? 0;
       if (!previous.some((g) => g.id === item.id)) {
         added.push(item.id);
         logger.info(
@@ -287,14 +359,8 @@ export function mergeDiscoveredGates(
           "discovery",
           `updated ${item.id} host ${existing.host} → ${item.host}`,
         );
-      } else if (prevMisses > 0) {
-        logger.info(
-          "discovery",
-          `recovered ${item.id} after ${prevMisses} missed scan(s) host=${item.host}`,
-        );
       }
       merged.set(item.id, { ...existing, host: item.host });
-      missedScansById.set(item.id, 0);
       continue;
     }
 
@@ -311,55 +377,43 @@ export function mergeDiscoveredGates(
       sortOrder: nextSortOrder,
     });
     nextSortOrder += 1;
-    missedScansById.set(item.id, 0);
-  }
-
-  for (const gate of previous) {
-    if (discoveredIds.has(gate.id)) continue;
-
-    const misses = (missedScansById.get(gate.id) ?? 0) + 1;
-    missedScansById.set(gate.id, misses);
-
-    if (misses < DISCOVERY_MAX_MISSED_SCANS) {
-      logger.warn(
-        "discovery",
-        `missed scan ${misses}/${DISCOVERY_MAX_MISSED_SCANS} for ${gate.id} host=${gate.host}`,
-      );
-      merged.set(gate.id, gate);
-    } else {
-      removed.push(gate.id);
-      missedScansById.delete(gate.id);
-      logger.warn(
-        "discovery",
-        `removed ${gate.id} after ${misses} missed scans host=${gate.host}`,
-      );
-    }
   }
 
   let gates = [...merged.values()];
 
   if (
-    rememberedStartGateId &&
-    gates.some((g) => g.id === rememberedStartGateId)
+    mem.rememberedStartGateId &&
+    gates.some((g) => g.id === mem.rememberedStartGateId)
   ) {
     gates = gates.map((g) => ({
       ...g,
-      isStartGate: g.id === rememberedStartGateId,
+      isStartGate: g.id === mem.rememberedStartGateId,
     }));
-  } else if (gates.length > 0 && !gates.some((g) => g.isStartGate)) {
+  } else if (
+    previousWasEmpty &&
+    gates.length > 0 &&
+    !gates.some((g) => g.isStartGate)
+  ) {
     const first = [...gates].sort((a, b) => a.sortOrder - b.sortOrder)[0];
-    gates = gates.map((g) =>
-      g.id === first?.id ? { ...g, isStartGate: true } : g,
-    );
-    if (first) rememberedStartGateId = first.id;
+    if (first) {
+      gates = gates.map((g) =>
+        g.id === first.id ? { ...g, isStartGate: true } : g,
+      );
+      mem.rememberedStartGateId = first.id;
+    }
   }
 
-  saveConfig((config) => ({
-    ...config,
-    gates,
-  }));
+  const inventoryChanged =
+    added.length > 0 || updated.length > 0 || !startFlagsEqual(previous, gates);
 
-  snapshotGates(gates);
+  if (inventoryChanged) {
+    saveConfig((config) => ({
+      ...config,
+      gates,
+    }));
+  }
+
+  snapshotGates(getGates());
 
   return {
     discovered,

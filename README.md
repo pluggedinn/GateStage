@@ -39,7 +39,7 @@ Select your provider in **Settings**. Only Next connects today; other integratio
 
 - **One brain on the RD laptop** — GateStage owns the race manager connection, event mapping, and ESPHome commands; browsers are thin clients.
 - **Event-driven gate control** — heat start, finish, and configurable routines from race events.
-- **Automatic gate discovery** — mDNS scans the race WiFi for ESPHome devices on startup and every 15 seconds.
+- **Automatic gate discovery** — flashed gates broadcast a UDP beacon; GateStage remembers the fleet and pings last-known IPs. A miss marks a row offline; it does not delete it or move start.
 - **Crew-friendly** — binds to `0.0.0.0` so anyone on race WiFi can open settings, the live console, or manual override.
 - **Zod-validated config** — settings in `data/config.json` with export/import via `GET/POST /api/config`.
 - **Dev without hardware** — mock Next and ESPHome servers simulate a full heat sequence on your laptop.
@@ -101,14 +101,14 @@ curl http://127.0.0.1:9085/state   # gate-finish
 
 GateStage runs on the same laptop as your race manager.
 The server connects over WebSocket (Next today), translates race events into ESPHome REST calls, and broadcasts live events to every browser tab on the race LAN.
-Gate discovery uses mDNS (`_esphomelib._tcp`) so only reachable devices on the LAN appear in your gate list.
+Gate discovery uses a UDP beacon on port **9420** (`{"v":1,"id":"gate-start","rssi":-62,"tC":47.5}` to `255.255.255.255`). Known gates stay in the list; health is unicast HTTP to the last-known IP. Firmware `mdns:` is for ESPHome OTA / `*.local` only.
 
 Full hardware and networking context lives in [AGENTS.md](./AGENTS.md#architecture).
 
 ## Configuration
 
 Settings are stored in `data/config.json` (gitignored).
-Gates sync from the network via mDNS on startup and every 15 seconds.
+Gates are remembered in that file. New flashed gates appear from UDP beacons; Scan Now broadcasts WHO and pings last-known hosts.
 
 Operational logs append to `data/gatestage.log` (same directory as config; desktop app: OS user data dir). Restarts keep writing to the same file. Override with `GATESTAGE_LOG_PATH`. Open **Logs** in the UI to tail the file, or read it on disk after a race day. At ~10 MB the file rotates once to `gatestage.log.1`.
 
@@ -130,6 +130,7 @@ Export/import via `GET/POST /api/config`.
 | Mock Next WebSocket | 9400 | ws://127.0.0.1:9400 |
 | Mock Next HTTP control | 9401 | http://127.0.0.1:9401 |
 | Mock ESPHome fleet | 9080–9085 | gate-start … gate-finish |
+| GateStage UDP beacons | 9420 | `255.255.255.255:9420` |
 
 ## Scripts
 
@@ -140,6 +141,7 @@ Export/import via `GET/POST /api/config`.
 | `npm run mock:next` | Mock Next RD WebSocket server |
 | `npm run mock:esphome` | Six mock ESPHome REST servers (ports 9080–9085) |
 | `npm run mock:esphome:single` | One mock ESPHome server on port 9080 |
+| `npm run test` | Unit tests |
 | `npm run test:e2e` | Playwright E2E tests |
 | `npm run build` | Production Next build |
 | `npm run build:next` | Next standalone + bundled desktop server entry |

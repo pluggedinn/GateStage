@@ -10,8 +10,10 @@
  *   GET  /state          command log (for tests)
  *   POST /reset          clear log
  */
+import dgram from "node:dgram";
 import http from "node:http";
 import { URL } from "node:url";
+import { mockGateTelemetry } from "../lib/dev/esphome-mock-fleet";
 
 export type EsphomeCommandLog = {
   entity: string;
@@ -59,12 +61,42 @@ export function createEsphomeMockServer(options: {
     );
   }
 
+  const telemetry = mockGateTelemetry(gateId);
+  const beaconPort = Number(process.env.GATESTAGE_BEACON_PORT ?? 9420);
+  const beaconSock = dgram.createSocket("udp4");
+
+  function sendBeacon() {
+    const payload = JSON.stringify({
+      v: 1,
+      id: gateId,
+      rssi: telemetry.rssi,
+      tC: telemetry.tC,
+      port,
+    });
+    beaconSock.send(payload, beaconPort, "127.0.0.1", () => {});
+  }
+
+  const beaconTimer = setInterval(sendBeacon, 3_000);
+  setTimeout(sendBeacon, 150);
+
   const server = http.createServer((req, res) => {
     const url = new URL(req.url ?? "/", `http://127.0.0.1:${port}`);
 
     if (req.method === "GET" && url.pathname === "/health") {
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    const lightGet = url.pathname.match(/^\/light\/([^/]+)$/);
+    if (req.method === "GET" && lightGet) {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(
+        JSON.stringify({
+          id: decodeURIComponent(lightGet[1]),
+          state: "ON",
+        }),
+      );
       return;
     }
 
@@ -100,7 +132,9 @@ export function createEsphomeMockServer(options: {
       return;
     }
 
-    const switchMatch = url.pathname.match(/^\/switch\/(.+)\/(turn_on|turn_off)$/);
+    const switchMatch = url.pathname.match(
+      /^\/switch\/(.+)\/(turn_on|turn_off)$/,
+    );
     if (req.method === "POST" && switchMatch) {
       const entity = decodeURIComponent(switchMatch[1]);
       const action = switchMatch[2] === "turn_on" ? "switch_on" : "switch_off";
@@ -110,7 +144,9 @@ export function createEsphomeMockServer(options: {
       return;
     }
 
-    const lightMatch = url.pathname.match(/^\/light\/(.+)\/(turn_on|turn_off)$/);
+    const lightMatch = url.pathname.match(
+      /^\/light\/(.+)\/(turn_on|turn_off)$/,
+    );
     if (req.method === "POST" && lightMatch) {
       const entity = decodeURIComponent(lightMatch[1]);
       const action = lightMatch[2] as "turn_on" | "turn_off";
@@ -146,6 +182,8 @@ export function createEsphomeMockServer(options: {
     port,
     close: () =>
       new Promise((resolve, reject) => {
+        clearInterval(beaconTimer);
+        beaconSock.close();
         server.close((err) => (err ? reject(err) : resolve()));
       }),
   };

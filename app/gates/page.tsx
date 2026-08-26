@@ -1,8 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { GatesSortableTable } from "@/components/gates-sortable-table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,7 +21,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import type { Gate } from "@/lib/config/schema";
+import { useRaceSocket } from "@/hooks/use-race-socket";
+import { emptyGateHealth, type GateView } from "@/lib/gate-health";
 
 type DiscoverResult = {
   added: string[];
@@ -20,36 +31,53 @@ type DiscoverResult = {
   discovered: { id: string; host: string; source: string }[];
 };
 
+function asGateView(raw: unknown): GateView | null {
+  if (!raw || typeof raw !== "object") return null;
+  const g = raw as Partial<GateView>;
+  if (typeof g.id !== "string" || typeof g.host !== "string") return null;
+  return {
+    id: g.id,
+    host: g.host,
+    isStartGate: Boolean(g.isStartGate),
+    enabled: g.enabled !== false,
+    sortOrder: typeof g.sortOrder === "number" ? g.sortOrder : 0,
+    online: Boolean(g.online),
+    lastSeenAt: g.lastSeenAt ?? null,
+    rssi: typeof g.rssi === "number" ? g.rssi : null,
+    tempC: typeof g.tempC === "number" ? g.tempC : null,
+  };
+}
+
 export default function GatesPage() {
-  const [gates, setGates] = useState<Gate[]>([]);
+  const { healthById, configRevision } = useRaceSocket();
+  const [gates, setGates] = useState<GateView[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [forgetGate, setForgetGate] = useState<GateView | null>(null);
 
   const loadGates = useCallback(async () => {
     const res = await fetch("/api/gates");
-    setGates(await res.json());
+    const data: unknown = await res.json();
+    if (!Array.isArray(data)) return;
+    setGates(data.map(asGateView).filter((g): g is GateView => g !== null));
   }, []);
 
   const scanNetwork = useCallback(async () => {
     setScanning(true);
-    const toastId = toast.loading("Scanning network for ESPHome gates…");
+    const toastId = toast.loading("Asking gates to announce…");
     try {
       const res = await fetch("/api/gates/discover", { method: "POST" });
       const data = (await res.json()) as DiscoverResult;
       await loadGates();
 
-      if (data.discovered.length === 0) {
-        toast.info("No gates found", {
-          id: toastId,
-          description: "No ESPHome devices responded on the network.",
-        });
-      } else if (
+      if (
         data.added.length === 0 &&
         data.updated.length === 0 &&
-        data.removed.length === 0
+        data.discovered.length === 0
       ) {
         toast.success("Scan complete", {
           id: toastId,
-          description: `${data.discovered.length} gate(s) on the network.`,
+          description:
+            "Pinged known gates. New flashed gates appear from beacons.",
         });
       } else {
         const parts: string[] = [];
@@ -57,12 +85,10 @@ export default function GatesPage() {
         if (data.updated.length > 0) {
           parts.push(`updated ${data.updated.join(", ")}`);
         }
-        if (data.removed.length > 0) {
-          parts.push(`removed ${data.removed.join(", ")}`);
-        }
         toast.success("Scan complete", {
           id: toastId,
-          description: parts.join("; "),
+          description:
+            parts.join("; ") || `${data.discovered.length} gate(s) announced.`,
         });
       }
     } catch {
@@ -76,10 +102,21 @@ export default function GatesPage() {
   }, [loadGates]);
 
   useEffect(() => {
+    void configRevision;
     void loadGates();
-  }, [loadGates]);
+  }, [loadGates, configRevision]);
 
-  async function toggleStartGate(gate: Gate) {
+  const rows = useMemo(
+    () =>
+      gates.map((gate) => ({
+        ...emptyGateHealth(),
+        ...gate,
+        ...healthById[gate.id],
+      })),
+    [gates, healthById],
+  );
+
+  async function toggleStartGate(gate: GateView) {
     await fetch(`/api/gates/${gate.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -88,7 +125,7 @@ export default function GatesPage() {
     await loadGates();
   }
 
-  async function toggleEnabled(gate: Gate) {
+  async function toggleEnabled(gate: GateView) {
     await fetch(`/api/gates/${gate.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -103,7 +140,7 @@ export default function GatesPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "ping" }),
     });
-    const data = (await res.json()) as { online: boolean };
+    const data = (await res.json()) as { online?: boolean };
     if (data.online) {
       toast.success("Gate online", { description: gateId });
     } else {
@@ -111,12 +148,28 @@ export default function GatesPage() {
     }
   }
 
+  async function confirmForget() {
+    if (!forgetGate) return;
+    const id = forgetGate.id;
+    const res = await fetch(`/api/gates/${id}`, { method: "DELETE" });
+    setForgetGate(null);
+    if (!res.ok) {
+      toast.error("Could not forget gate", { description: id });
+      return;
+    }
+    toast.success(`Forgot ${id}`, {
+      description:
+        "If it is still on the LAN, the next beacon will add it back.",
+    });
+    await loadGates();
+  }
+
   async function reorderGates(orderedIds: string[]) {
     const previous = gates;
     const byId = new Map(previous.map((g) => [g.id, g]));
     const optimistic = orderedIds
       .map((id) => byId.get(id))
-      .filter((g): g is Gate => g !== undefined);
+      .filter((g): g is GateView => g !== undefined);
     setGates(optimistic);
 
     const res = await fetch("/api/gates/reorder", {
@@ -134,8 +187,10 @@ export default function GatesPage() {
       return;
     }
 
-    setGates((await res.json()) as Gate[]);
+    await loadGates();
   }
+
+  const onlineCount = rows.filter((g) => g.online).length;
 
   return (
     <div className="space-y-6">
@@ -143,43 +198,68 @@ export default function GatesPage() {
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Gates</h1>
           <p className="text-base text-muted-foreground">
-            Gates are discovered from ESPHome devices on the race LAN via mDNS.
-            The list syncs automatically every 15 seconds.
+            The fleet is remembered. Flashed gates announce themselves over UDP;
+            Scan Now asks them to speak and pings last-known IPs. A WiFi blip
+            marks a row offline — it does not remove it or move start.
           </p>
         </div>
         <Button onClick={() => void scanNetwork()} disabled={scanning}>
-          {scanning ? "Scanning…" : "Scan network"}
+          {scanning ? "Scanning…" : "Scan now"}
         </Button>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Discovered gates</CardTitle>
+          <CardTitle>Known gates</CardTitle>
           <CardDescription>
-            {gates.length} gate(s) on the network
+            {gates.length} remembered · {onlineCount} online
             {scanning ? " · scanning…" : ""}
-            {gates.length > 1
-              ? " · drag rows to set track order"
-              : ""}
+            {gates.length > 1 ? " · drag rows to set track order" : ""}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {gates.length === 0 ? (
             <p className="text-base text-muted-foreground">
-              No gates on the network. Ensure ESPHome devices are powered on, on
-              the same WiFi, and advertising mDNS — then scan.
+              No gates in the list yet. Power flashed GateStage firmware on the
+              race WiFi — they appear from UDP beacons — or Scan Now if you use
+              mock/env discovery.
             </p>
           ) : (
             <GatesSortableTable
-              gates={gates}
+              gates={rows}
               onReorder={(orderedIds) => void reorderGates(orderedIds)}
               onToggleStartGate={toggleStartGate}
               onToggleEnabled={toggleEnabled}
               onPingGate={pingGate}
+              onForgetGate={setForgetGate}
             />
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={forgetGate !== null}
+        onOpenChange={(open) => {
+          if (!open) setForgetGate(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Forget {forgetGate?.id}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Removes this gate from the list. Start gate, order, and enabled
+              are forgotten with it. If the hardware is still on the network,
+              the next beacon will add it back.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmForget()}>
+              Forget
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -50,13 +50,17 @@ export class RaceManagerListener {
     logger.info("race-manager", `starting provider "${this.provider}"`);
 
     const config = {
-      nextWsUrl:
-        process.env.NEXT_WS_URL ??
-        getSetting("nextWsUrl") ??
-        "ws://127.0.0.1:9400",
-      rotorHazardUrl:
-        getSetting("rotorHazardUrl") ?? "http://rotorhazard.local:5000",
+      nextWsUrl: getSetting("nextWsUrl"),
+      rotorHazardUrl: getSetting("rotorHazardUrl"),
     };
+    logger.info(
+      "race-manager",
+      this.provider === "next"
+        ? `connecting next ${config.nextWsUrl}`
+        : this.provider === "rotorhazard"
+          ? `connecting rotorhazard ${config.rotorHazardUrl}`
+          : `provider "${this.provider}" has no connection URL`,
+    );
 
     this.adapter = createAdapter(this.provider, config, {
       onEvent: (event) => this.handleEvent(event),

@@ -18,6 +18,7 @@ Test event: `curl -X POST http://127.0.0.1:9401/emit -H 'Content-Type: applicati
 | Command | Purpose |
 |---------|---------|
 | `npm run dev:mocks` | Full local stack (recommended) |
+| `npm run test` | Unit tests (discovery merge, beacon parse) |
 | `npm run test:e2e` | Playwright (starts mocks automatically) |
 | `npm run lint` | Biome check |
 | `npm run build:next` | Next standalone + bundled `gatestage-server.cjs` |
@@ -32,7 +33,7 @@ More commands and ports: [README.md](./README.md). Desktop packaging: [docs/DESK
 1. **Server is the brain** — race automation lives in `lib/` (Node), not React clients. Browsers are thin Socket.io clients.
 2. **Run via `server.ts`** — not plain `next dev` (no Socket.io / RaceBrain / race manager listener otherwise).
 3. **ESPHome from server only** — never call ESP32 from the browser (CORS). Use `lib/esphome.ts`.
-4. **Gates are discovered** — mDNS (`_esphomelib._tcp`), not manually created. No `POST /api/gates`.
+4. **Gates are discovered** — UDP beacons (`255.255.255.255:9420`), not manually created. No `POST /api/gates`. Forget with `DELETE /api/gates/:id`.
 5. **Bind `0.0.0.0`** — crew reach `http://<rd-laptop-ip>:8080`. No auth (trusted LAN).
 6. **UI status colors** — semantic tokens in `app/globals.css` only; see [docs/DESIGN.md](./docs/DESIGN.md).
 
@@ -56,7 +57,7 @@ Race manager  ──WebSocket──▶  server.ts / RaceBrain (lib/)
 | ESPHome commands | `lib/esphome.ts` (entity: **`"Gate LEDs"`**) |
 | Config (Zod JSON) | `lib/config/` |
 | Live UI push | `lib/broadcaster.ts` |
-| Gate discovery | `lib/gate-discovery.ts` (rescan ~15s) |
+| Gate discovery | `lib/gate-discovery.ts`, `lib/gate-presence.ts` (UDP :9420 + unicast ping) |
 
 Path alias: `@/*` → project root. Server logic in `lib/`, UI in `app/` + `components/`.
 
@@ -66,7 +67,7 @@ Path alias: `@/*` → project root. Server logic in `lib/`, UI in `app/` + `comp
 
 `data/config.json` (override: `GATESTAGE_CONFIG_PATH`). Version **2**: `settings`, `gates[]`, `sequences[]`.
 
-- **Gates:** `{ id, host, isStartGate, enabled, sortOrder }` — from network discovery
+- **Gates:** `{ id, host, isStartGate, enabled, sortOrder }` — from UDP beacons / env extras. Health (`online`, last-seen, RSSI, temp) is runtime-only. Start gate is sticky; only Forget removes a row.
 - **Sequences** (UI: Routines): event type → ordered steps (`action` or `delay`)
 - **Actions:** `effect` | `solid` | `off` | `pilot_color` | `choreography`
 - **Targets:** `all` | `start_gate` | `gate_id`
@@ -116,6 +117,7 @@ Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-se
 | Automation logic | `lib/gate-engine.ts` |
 | Gate commands | `lib/esphome.ts`, `lib/effects.ts` |
 | Config / schema | `lib/config/schema.ts`, `lib/config/store.ts` |
+| Gate discovery / health | `lib/gate-discovery.ts`, `lib/gate-presence.ts`, `lib/gate-health.ts` |
 | API endpoint | `app/api/` |
 | Live dashboard | `lib/broadcaster.ts`, `hooks/use-race-socket.tsx` |
 | Routines UI | `app/routines/` |
