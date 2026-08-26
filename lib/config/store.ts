@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { logger } from "@/lib/logger";
 import {
   type Config,
   configSchema,
@@ -273,10 +274,24 @@ export function mergeDiscoveredGates(
       previous.find((g) => g.id === item.id) ?? lastKnownById.get(item.id);
 
     if (existing) {
+      const prevMisses = missedScansById.get(item.id) ?? 0;
       if (!previous.some((g) => g.id === item.id)) {
         added.push(item.id);
+        logger.info(
+          "discovery",
+          `added ${item.id} host=${item.host} (reappeared)`,
+        );
       } else if (existing.host !== item.host) {
         updated.push(item.id);
+        logger.info(
+          "discovery",
+          `updated ${item.id} host ${existing.host} → ${item.host}`,
+        );
+      } else if (prevMisses > 0) {
+        logger.info(
+          "discovery",
+          `recovered ${item.id} after ${prevMisses} missed scan(s) host=${item.host}`,
+        );
       }
       merged.set(item.id, { ...existing, host: item.host });
       missedScansById.set(item.id, 0);
@@ -284,6 +299,10 @@ export function mergeDiscoveredGates(
     }
 
     added.push(item.id);
+    logger.info(
+      "discovery",
+      `added ${item.id} host=${item.host} source=${item.source}`,
+    );
     merged.set(item.id, {
       id: item.id,
       host: item.host,
@@ -302,10 +321,18 @@ export function mergeDiscoveredGates(
     missedScansById.set(gate.id, misses);
 
     if (misses < DISCOVERY_MAX_MISSED_SCANS) {
+      logger.warn(
+        "discovery",
+        `missed scan ${misses}/${DISCOVERY_MAX_MISSED_SCANS} for ${gate.id} host=${gate.host}`,
+      );
       merged.set(gate.id, gate);
     } else {
       removed.push(gate.id);
       missedScansById.delete(gate.id);
+      logger.warn(
+        "discovery",
+        `removed ${gate.id} after ${misses} missed scans host=${gate.host}`,
+      );
     }
   }
 

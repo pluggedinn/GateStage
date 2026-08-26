@@ -2,6 +2,7 @@ import { broadcaster } from "./broadcaster";
 import { initConfig, reloadConfig } from "./config/store";
 import { syncGatesFromNetwork } from "./gate-discovery";
 import { GateEngine } from "./gate-engine";
+import { logger } from "./logger";
 import { RaceManagerListener } from "./race-manager-listener";
 
 const GLOBAL_BRAIN_KEY = "__gatestage_race_brain__";
@@ -53,13 +54,14 @@ async function runGateDiscovery() {
       result.updated.length > 0 ||
       result.removed.length > 0
     ) {
-      console.log(
-        `[discovery] added=${result.added.join(",") || "none"} updated=${result.updated.join(",") || "none"} removed=${result.removed.join(",") || "none"}`,
+      logger.info(
+        "discovery",
+        `scan result added=${result.added.join(",") || "none"} updated=${result.updated.join(",") || "none"} removed=${result.removed.join(",") || "none"}`,
       );
       broadcaster.emitConfigUpdated();
     }
   } catch (err) {
-    console.error("[discovery] failed:", err);
+    logger.error("discovery", "scan failed", err);
   }
 }
 
@@ -82,11 +84,12 @@ export function initRaceBrain() {
     void runGateDiscovery();
   }, DISCOVERY_INTERVAL_MS);
 
-  console.log("[race-brain] initialized");
+  logger.info("race-brain", "initialized");
   return getRaceBrain();
 }
 
 export function shutdownRaceBrain() {
+  logger.info("race-brain", "shutting down");
   const state = brainState();
   state.raceManagerListener?.stop();
   state.raceManagerListener = null;
@@ -97,6 +100,7 @@ export function shutdownRaceBrain() {
 
 /** Re-read config and reconnect the active race-manager adapter (e.g. after Settings save). */
 export function reloadRaceManagerListener() {
+  logger.info("race-manager", "reloading listener from settings");
   const state = brainState();
   const brain = getRaceBrain();
   if (!state.raceManagerListener) {

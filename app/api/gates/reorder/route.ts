@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { broadcaster } from "@/lib/broadcaster";
 import { reorderGates } from "@/lib/config/store";
+import { logger } from "@/lib/logger";
 
 const reorderSchema = z.object({
   orderedIds: z.array(z.string().min(1)),
 });
 
+/** Persist track order from the Gates table (`orderedIds` must list every gate once). */
 export async function POST(request: Request) {
   let body: unknown;
   try {
@@ -25,6 +27,7 @@ export async function POST(request: Request) {
 
   try {
     const gates = reorderGates(parsed.data.orderedIds);
+    logger.info("gates", `reordered ${parsed.data.orderedIds.join(", ")}`);
     broadcaster.emitConfigUpdated();
     return NextResponse.json(gates);
   } catch (err) {

@@ -11,6 +11,7 @@ import {
 import { describeEffectAction } from "@/lib/effects";
 import { type EsphomeCommand, sendEsphomeCommand } from "@/lib/esphome";
 import { ingestRaceEvent, resolvePilotColor } from "@/lib/heat-state";
+import { logger } from "@/lib/logger";
 import type { RaceEventType } from "@/lib/race-events";
 import { describeDelayStep } from "@/lib/sequence-display";
 import { createTestRaceEvent } from "@/lib/test-race-event";
@@ -39,13 +40,29 @@ export class GateEngine {
     if (event.type === "pilot.crossing") {
       const last = lastCrossingByPilot.get(event.pilot.id) ?? 0;
       const now = Date.now();
-      if (now - last < crossingDebounceMs) return;
+      if (now - last < crossingDebounceMs) {
+        logger.debug(
+          "gate-engine",
+          `debounced ${event.type} for ${event.pilot.id}`,
+        );
+        return;
+      }
       lastCrossingByPilot.set(event.pilot.id, now);
     }
 
     const sequence = getSequence(event.type);
-    if (!sequence?.enabled || sequence.steps.length === 0) return;
+    if (!sequence?.enabled || sequence.steps.length === 0) {
+      logger.info(
+        "gate-engine",
+        `no routine for ${event.type} enabled=${sequence?.enabled ?? false} steps=${sequence?.steps.length ?? 0}`,
+      );
+      return;
+    }
 
+    logger.info(
+      "gate-engine",
+      `running routine ${event.type} steps=${sequence.steps.length}`,
+    );
     await this.executeSequence(sequence.steps, event);
   }
 
@@ -76,6 +93,10 @@ export class GateEngine {
     }
 
     ingestRaceEvent(event);
+    logger.info(
+      "gate-engine",
+      `manual run routine ${eventType} steps=${sequence.steps.length}`,
+    );
     await this.executeSequence(sequence.steps, event);
     return { ok: true };
   }
@@ -100,6 +121,7 @@ export class GateEngine {
   ) {
     if (step.kind === "delay") {
       const label = describeDelayStep(step.ms);
+      logger.info("gate-engine", `delay ${step.ms}ms (${label})`);
       this.broadcaster.emitRaceAction({
         gateId: ROUTINE_LOG_GATE,
         command: label,
@@ -152,6 +174,19 @@ export class GateEngine {
         at: new Date().toISOString(),
       };
       this.broadcaster.emitRaceAction(envelope);
+      if (res.ok) {
+        logger.info(
+          "gate-engine",
+          `${gate.id} ${label} ok host=${gate.host}`,
+          command,
+        );
+      } else {
+        logger.error(
+          "gate-engine",
+          `${gate.id} ${label} HTTP ${res.status} host=${gate.host}`,
+          command,
+        );
+      }
       return { ok: res.ok, status: res.status };
     } catch (err) {
       const envelope: RaceActionEnvelope = {
@@ -162,6 +197,11 @@ export class GateEngine {
         at: new Date().toISOString(),
       };
       this.broadcaster.emitRaceAction(envelope);
+      logger.error(
+        "gate-engine",
+        `${gate.id} ${label} failed host=${gate.host}`,
+        err,
+      );
       return {
         ok: false,
         error: err instanceof Error ? err.message : "Unknown error",

@@ -4,6 +4,7 @@ import { parse } from "node:url";
 import next from "next";
 import { Server as SocketServer } from "socket.io";
 import { broadcaster } from "./lib/broadcaster";
+import { getLogFilePath, initLogger, logger } from "./lib/logger";
 import {
   getRaceBrain,
   initRaceBrain,
@@ -21,6 +22,14 @@ const dir = process.env.GATESTAGE_APP_DIR
 const app = next({ dev, hostname, port, dir });
 const handle = app.getRequestHandler();
 
+initLogger();
+logger.info("gatestage", "starting", {
+  hostname,
+  port,
+  dir,
+  logPath: getLogFilePath(),
+});
+
 app
   .prepare()
   .then(() => {
@@ -37,7 +46,7 @@ app
     initRaceBrain();
 
     io.on("connection", (socket) => {
-      console.log("[socket.io] client connected", socket.id);
+      logger.info("socket.io", `client connected ${socket.id}`);
       const { raceManagerListener } = getRaceBrain();
       socket.emit(
         "connection:raceManager",
@@ -49,16 +58,17 @@ app
       );
       broadcaster.replayRecent(socket);
       socket.on("disconnect", () => {
-        console.log("[socket.io] client disconnected", socket.id);
+        logger.info("socket.io", `client disconnected ${socket.id}`);
       });
     });
 
     httpServer.listen(port, hostname, () => {
-      console.log(`[gatestage] ready on http://${hostname}:${port}`);
-      console.log(`[gatestage] app dir ${dir}`);
+      logger.info("gatestage", `ready on http://${hostname}:${port}`);
+      logger.info("gatestage", `app dir ${dir}`);
     });
 
     const shutdown = () => {
+      logger.info("gatestage", "shutting down");
       shutdownRaceBrain();
       io.close();
       httpServer.close(() => {
@@ -71,6 +81,6 @@ app
     process.once("SIGTERM", shutdown);
   })
   .catch((err: unknown) => {
-    console.error("[gatestage] failed to start", err);
+    logger.error("gatestage", "failed to start", err);
     process.exit(1);
   });

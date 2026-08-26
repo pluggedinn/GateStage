@@ -2,13 +2,18 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { broadcaster } from "@/lib/broadcaster";
 import { validateChoreographyAction } from "@/lib/choreography";
-import { actionUsesPilotColorSource, eventSupportsPilotColor } from "@/lib/color-source";
+import {
+  actionUsesPilotColorSource,
+  eventSupportsPilotColor,
+} from "@/lib/color-source";
 import { eventSequenceSchema } from "@/lib/config/schema";
 import { getSequence, saveConfig } from "@/lib/config/store";
+import { logger } from "@/lib/logger";
 import { sequenceActionStepSchema, sequenceDelayStepSchema } from "@/lib/types";
 
 type Params = { params: Promise<{ eventType: string }> };
 
+/** Append an action or delay step to the routine for this event type. */
 export async function POST(request: Request, { params }: Params) {
   const { eventType } = await params;
   const body = await request.json();
@@ -78,6 +83,7 @@ export async function POST(request: Request, { params }: Params) {
     return { ...config, sequences };
   });
 
+  logger.info("routines", `added step to ${eventType}`, step);
   broadcaster.emitConfigUpdated();
   return NextResponse.json({ step, sequence: updated }, { status: 201 });
 }

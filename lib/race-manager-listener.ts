@@ -7,6 +7,7 @@ import {
   type IntegrationId,
   type RaceManagerConnectionState,
 } from "./integrations";
+import { logger } from "./logger";
 import type { RaceEvent, RaceEventEnvelope } from "./types";
 
 /**
@@ -46,7 +47,7 @@ export class RaceManagerListener {
 
   start() {
     this.provider = getSetting("raceManagerProvider");
-    console.log(`[race-manager-listener] starting provider "${this.provider}"`);
+    logger.info("race-manager", `starting provider "${this.provider}"`);
 
     const config = {
       nextWsUrl:
@@ -63,8 +64,9 @@ export class RaceManagerListener {
     });
 
     if (!this.adapter) {
-      console.log(
-        `[race-manager-listener] provider "${this.provider}" is not yet implemented`,
+      logger.info(
+        "race-manager",
+        `provider "${this.provider}" is not yet implemented`,
       );
       this.emitConnectionState();
       return;
@@ -85,12 +87,18 @@ export class RaceManagerListener {
     reloadConfig();
     this.start();
     this.emitConnectionState();
-    console.log(
-      `[race-manager-listener] restarted ${previous} → ${this.provider}`,
-    );
+    logger.info("race-manager", `restarted ${previous} → ${this.provider}`);
   }
 
   private setConnected(connected: boolean) {
+    if (this.connected !== connected) {
+      logger.info(
+        "race-manager",
+        connected
+          ? `connected provider="${this.provider}"`
+          : `disconnected provider="${this.provider}"`,
+      );
+    }
     this.connected = connected;
     this.emitConnectionState();
   }
@@ -105,6 +113,8 @@ export class RaceManagerListener {
       payload: event,
       at: new Date().toISOString(),
     };
+
+    logger.info("race-manager", `event ${event.type}`, event);
 
     this.broadcaster.emitRaceEvent(envelope);
     void this.gateEngine.dispatch(event);

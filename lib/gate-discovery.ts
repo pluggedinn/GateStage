@@ -1,10 +1,11 @@
 import { Bonjour, type Service } from "bonjour-service";
 import {
-  mergeDiscoveredGates,
   type MergeDiscoveryResult,
+  mergeDiscoveredGates,
 } from "@/lib/config/store";
 import { esphomeMockFleetHosts } from "@/lib/dev/esphome-mock-fleet";
 import { pingGate } from "@/lib/esphome";
+import { logger } from "@/lib/logger";
 
 export type DiscoveredGate = {
   id: string;
@@ -12,7 +13,9 @@ export type DiscoveredGate = {
   source: "mdns" | "env";
 };
 
-const DEFAULT_SCAN_MS = Number(process.env.GATESTAGE_DISCOVERY_TIMEOUT_MS ?? 5000);
+const DEFAULT_SCAN_MS = Number(
+  process.env.GATESTAGE_DISCOVERY_TIMEOUT_MS ?? 5000,
+);
 const WEB_SERVER_PORT = Number(process.env.GATESTAGE_ESPHOME_HTTP_PORT ?? 80);
 
 function normalizeGateId(name: string): string {
@@ -79,14 +82,16 @@ async function verifyDiscovered(
     if (await pingGate(gate.host)) {
       verified.push(gate);
     } else {
-      console.warn(`[discovery] unreachable: ${gate.id} @ ${gate.host}`);
+      logger.warn("discovery", `unreachable ${gate.id} @ ${gate.host}`);
     }
   }
 
   return verified.sort((a, b) => a.id.localeCompare(b.id));
 }
 
-async function discoverGates(timeoutMs = DEFAULT_SCAN_MS): Promise<DiscoveredGate[]> {
+async function discoverGates(
+  timeoutMs = DEFAULT_SCAN_MS,
+): Promise<DiscoveredGate[]> {
   const candidates = new Map<string, DiscoveredGate>();
 
   for (const gate of gatesFromEnv()) {

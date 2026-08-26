@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
 import { getSequence } from "@/lib/config/store";
+import { logger } from "@/lib/logger";
 import { getRaceBrain } from "@/lib/race-brain";
 import { createTestRaceEvent, isRaceEventType } from "@/lib/test-race-event";
 import type { RaceEventEnvelope } from "@/lib/types";
 
 type Params = { params: Promise<{ eventType: string }> };
 
+/** Preview-run a routine from the UI using a synthetic race event. */
 export async function POST(_request: Request, { params }: Params) {
   const { eventType } = await params;
 
@@ -24,6 +26,7 @@ export async function POST(_request: Request, { params }: Params) {
     );
   }
 
+  logger.info("routines", `run ${eventType} steps=${sequence.steps.length}`);
   const event = createTestRaceEvent(eventType);
   const { gateEngine, broadcaster } = getRaceBrain();
 

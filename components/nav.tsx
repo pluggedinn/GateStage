@@ -12,6 +12,7 @@ const links = [
   { href: "/routines", label: "Routines" },
   { href: "/manual", label: "Manual" },
   { href: "/settings", label: "Settings" },
+  { href: "/logs", label: "Logs" },
 ];
 
 function isActivePath(pathname: string, href: string) {

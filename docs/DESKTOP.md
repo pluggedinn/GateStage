@@ -15,12 +15,14 @@ npm run build:desktop
 
 Artifacts land in `dist/desktop/`.
 
-## Config location
+## Config and logs
 
-| Mode | Config path |
-|------|-------------|
-| `npm run dev` / `npm start` | `./data/config.json` (or `GATESTAGE_CONFIG_PATH`) |
-| Desktop app | OS user data dir (`…/GateStage/config.json`), set via `GATESTAGE_CONFIG_PATH` by Electron |
+| Mode | Config path | Log path |
+|------|-------------|----------|
+| `npm run dev` / `npm start` | `./data/config.json` (or `GATESTAGE_CONFIG_PATH`) | `./data/gatestage.log` (sibling of config; or `GATESTAGE_LOG_PATH`) |
+| Desktop app | OS user data dir (`…/GateStage/config.json`), set via `GATESTAGE_CONFIG_PATH` by Electron | Same directory (`…/GateStage/gatestage.log`) |
+
+The log is append-only across restarts. Open **Logs** in the UI to tail it. At ~10 MB it rotates once to `gatestage.log.1`.
 
 ## Releases (GitHub Actions)
 

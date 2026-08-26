@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { broadcaster } from "@/lib/broadcaster";
 import { eventSequenceSchema } from "@/lib/config/schema";
 import { getSequence, saveConfig } from "@/lib/config/store";
+import { logger } from "@/lib/logger";
 
 type Params = { params: Promise<{ eventType: string }> };
 
+/** Enable or disable the routine for a race event type. */
 export async function PATCH(request: Request, { params }: Params) {
   const { eventType } = await params;
   const body = (await request.json()) as Partial<{ enabled: boolean }>;
@@ -27,6 +29,7 @@ export async function PATCH(request: Request, { params }: Params) {
     }),
   }));
 
+  logger.info("routines", `${eventType} enabled=${updated.enabled}`);
   broadcaster.emitConfigUpdated();
   return NextResponse.json(updated);
 }
