@@ -52,7 +52,7 @@ Race manager  ──WebSocket──▶  server.ts / RaceBrain (lib/)
 |-------|-------|
 | Boot + Socket.io | `server.ts` → `initRaceBrain()` |
 | Integration registry | `lib/integrations.ts` |
-| Race manager WS client | `lib/race-manager-listener.ts` (Next implemented; others WIP) |
+| Race manager WS client | `lib/race-manager-listener.ts`, `lib/adapters/` (Next + RotorHazard; Trackside WIP) |
 | Event → actions | `lib/gate-engine.ts` |
 | ESPHome commands | `lib/esphome.ts` (entity: **`"Gate LEDs"`**) |
 | Config (Zod JSON) | `lib/config/` |
@@ -95,9 +95,19 @@ Changing provider or URL reconnects the listener automatically (Settings save).
 
 ## Race events
 
-`heat.loaded` · `heat.arm_started` · `heat.go` · `heat.finished` · `pilot.crossing` — validated in `lib/types.ts`. Pilot color: `{ r, g, b }` 0–255. `pilot.crossing` debounced 400ms.
+`heat.loaded` · `heat.arm_started` · `heat.go` · `heat.finished` · `heat.last_call` · `pilot.crossing` — validated in `lib/types.ts`. Pilot color: `{ r, g, b }` 0–255. `pilot.crossing` debounced 400ms.
 
-Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-server.ts` for dev.
+Next WebSocket (`ws://localhost:5702`; mock `ws://127.0.0.1:9400`) is translated in `lib/adapters/next-events.ts`:
+
+| Next `event` | Internal type |
+|--------------|---------------|
+| `arm` | `heat.arm_started` |
+| `start` | `heat.go` |
+| `finish` | `heat.finished` |
+| `lastcall` | `heat.last_call` (Pulse must be enabled) |
+| `pilot` | `pilot.crossing` (hex color `FF0000` → RGB) |
+
+Next has no heat-loaded / roster event. `heat.loaded` is still used by RotorHazard. Use `mocks/next-ws-server.ts` for local wire-format events.
 
 ---
 
@@ -113,7 +123,7 @@ Real Next WebSocket schema is **not fully documented** — use `mocks/next-ws-se
 
 | Task | Files |
 |------|-------|
-| Race manager integrations | `lib/integrations.ts`, `lib/race-manager-listener.ts` |
+| Race manager integrations | `lib/integrations.ts`, `lib/race-manager-listener.ts`, `lib/adapters/` |
 | Automation logic | `lib/gate-engine.ts` |
 | Gate commands | `lib/esphome.ts`, `lib/effects.ts` |
 | Config / schema | `lib/config/schema.ts`, `lib/config/store.ts` |

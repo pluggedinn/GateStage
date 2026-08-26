@@ -48,6 +48,11 @@ const fixtures: Record<RaceEventType, RaceEvent> = {
     type: "heat.finished",
     heat: testHeat,
   },
+  "heat.last_call": {
+    type: "heat.last_call",
+    seconds: 60,
+    heat: testHeat,
+  },
   "pilot.crossing": {
     type: "pilot.crossing",
     pilot: testPilots[0],
