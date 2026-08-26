@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/gatestage-logo.png" alt="GateStage" width="280" />
+</p>
+
 <h1 align="center">GateStage</h1>
 
 <p align="center">
