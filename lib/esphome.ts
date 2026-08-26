@@ -5,6 +5,7 @@ import {
   type EffectParamDef,
   mergeEffectParams,
 } from "@/lib/effects";
+import { logger } from "@/lib/logger";
 
 /** ESPHome light entity name — fixed across all gates */
 export const DEFAULT_LIGHT_ENTITY = "Gate LEDs";
@@ -41,6 +42,83 @@ function hostBase(host: string) {
   return host.startsWith("http") ? host : `http://${host}`;
 }
 
+function commandTimeoutMs() {
+  return Number(process.env.GATESTAGE_GATE_COMMAND_TIMEOUT_MS ?? 800);
+}
+
+function commandRetries() {
+  return Number(process.env.GATESTAGE_GATE_COMMAND_RETRIES ?? 2);
+}
+
+function commandRetryDelayMs() {
+  return Number(process.env.GATESTAGE_GATE_COMMAND_RETRY_DELAY_MS ?? 150);
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
+function isRetryableStatus(status: number) {
+  return status >= 500 || status === 408 || status === 429;
+}
+
+function describeFetchTarget(url: string) {
+  try {
+    const parsed = new URL(url);
+    return `${parsed.host}${parsed.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
+function errorMessage(err: unknown) {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+async function esphomeFetch(
+  url: string,
+  init: RequestInit = {},
+): Promise<Response> {
+  const timeoutMs = commandTimeoutMs();
+  const retries = commandRetries();
+  const delayMs = commandRetryDelayMs();
+  const attempts = retries + 1;
+  const target = describeFetchTarget(url);
+
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        ...init,
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (res.ok || !isRetryableStatus(res.status) || attempt === attempts) {
+        return res;
+      }
+      logger.warn(
+        "esphome",
+        `HTTP ${res.status} ${target} attempt ${attempt}/${attempts}, retrying`,
+      );
+    } catch (err) {
+      lastError = err;
+      if (attempt === attempts) throw err;
+      logger.warn(
+        "esphome",
+        `${errorMessage(err)} ${target} attempt ${attempt}/${attempts}, retrying`,
+      );
+    }
+    if (attempt < attempts && delayMs > 0) {
+      await sleep(delayMs);
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new Error("ESPHome request failed");
+}
+
 function paramValueForEntity(
   param: EffectParamDef,
   value: number | boolean,
@@ -59,12 +137,12 @@ async function setEffectParamEntity(
   if (param.type === "bool") {
     const action = value ? "turn_on" : "turn_off";
     const url = `${base}/switch/${entityPath(param.entityName)}/${action}`;
-    await fetch(url, { method: "POST" });
+    await esphomeFetch(url, { method: "POST" });
     return;
   }
 
   const url = `${base}/number/${entityPath(param.entityName)}/set?value=${paramValueForEntity(param, value)}`;
-  await fetch(url, { method: "POST" });
+  await esphomeFetch(url, { method: "POST" });
 }
 
 export async function sendEsphomeCommand(
@@ -76,7 +154,7 @@ export async function sendEsphomeCommand(
 
   if (command.kind === "off") {
     const url = `${base}/light/${entitySeg}/turn_off`;
-    return fetch(url, {
+    return esphomeFetch(url, {
       method: "POST",
       headers: { "Content-Length": "0" },
     });
@@ -110,7 +188,7 @@ export async function sendEsphomeCommand(
     }
 
     const url = `${base}/light/${entitySeg}/turn_on?${q}`;
-    return fetch(url, {
+    return esphomeFetch(url, {
       method: "POST",
       headers: { "Content-Length": "0" },
     });
@@ -126,7 +204,7 @@ export async function sendEsphomeCommand(
     transition: "0",
   });
   const url = `${base}/light/${entitySeg}/turn_on?${q}`;
-  return fetch(url, {
+  return esphomeFetch(url, {
     method: "POST",
     headers: { "Content-Length": "0" },
   });
