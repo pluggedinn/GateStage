@@ -3,7 +3,7 @@
 # Flash one copy per gate. Pass `gate_id` at flash time (default "1" below):
 #   esphome -s gate_id 3 run gate.yaml
 #   ./flash-gate.sh 3
-# That sets esphome.name to gate-<id> — the gate ID GateStage discovers via mDNS.
+# That sets esphome.name to gate-<id> — the gate ID in UDP beacons GateStage listens for.
 #
 # Hardware (default in this file):
 #   - Seeed XIAO ESP32-C5
@@ -69,6 +69,14 @@ wifi:
   ap:
     ssid: GateStage-gate-${gate_id}
     password: "tinywhoop"
+  on_connect:
+    then:
+      - delay: 500ms
+      - repeat:
+          count: 3
+          then:
+            - script.execute: send_gatestage_beacon
+            - delay: 200ms
 
 api:
 
@@ -80,6 +88,22 @@ web_server:
   port: 80
   version: 3
   local: true
+
+# GateStage presence: broadcast id + RSSI + chip temp. Laptop listens on 9420.
+udp:
+  id: gatestage_beacon
+  port: 9420
+  addresses:
+    - 255.255.255.255
+  on_receive:
+    then:
+      - if:
+          condition:
+            lambda: |-
+              std::string s(data.begin(), data.end());
+              return s.find("\"q\":\"who\"") != std::string::npos;
+          then:
+            - script.execute: send_gatestage_beacon
 
 # Runtime strip + effect parameters (GateStage sets these via REST)
 globals:
@@ -310,6 +334,37 @@ switch:
           value: "false"
 
 script:
+  - id: send_gatestage_beacon
+    mode: single
+    then:
+      - udp.write:
+          id: gatestage_beacon
+          data: !lambda |-
+            char buf[160];
+            const char *name = App.get_name().c_str();
+            const bool have_rssi = !std::isnan(id(wifi_rssi).state);
+            const bool have_temp = !std::isnan(id(esp_temp).state);
+            int n = 0;
+            if (have_rssi && have_temp) {
+              n = snprintf(buf, sizeof(buf),
+                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f,\"tC\":%.1f}",
+                name, id(wifi_rssi).state, id(esp_temp).state);
+            } else if (have_rssi) {
+              n = snprintf(buf, sizeof(buf),
+                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f}",
+                name, id(wifi_rssi).state);
+            } else if (have_temp) {
+              n = snprintf(buf, sizeof(buf),
+                "{\"v\":1,\"id\":\"%s\",\"tC\":%.1f}",
+                name, id(esp_temp).state);
+            } else {
+              n = snprintf(buf, sizeof(buf), "{\"v\":1,\"id\":\"%s\"}", name);
+            }
+            if (n < 0) return {};
+            const size_t len = static_cast<size_t>(n) < sizeof(buf)
+              ? static_cast<size_t>(n)
+              : sizeof(buf) - 1;
+            return std::vector<uint8_t>(buf, buf + len);
   - id: mask_inactive_leds
     mode: restart
     then:
@@ -336,9 +391,17 @@ interval:
               return id(gate_led).get_current_effect_index() == 0;
           then:
             - script.execute: mask_inactive_leds
+  - interval: 3s
+    then:
+      - script.execute: send_gatestage_beacon
 
 sensor:
+  - platform: wifi_signal
+    id: wifi_rssi
+    name: "WiFi Signal"
+    update_interval: 10s
   - platform: internal_temperature
+    id: esp_temp
     name: "ESP Temperature"
     update_interval: 60s
 

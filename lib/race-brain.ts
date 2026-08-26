@@ -2,6 +2,7 @@ import { broadcaster } from "./broadcaster";
 import { initConfig, reloadConfig } from "./config/store";
 import { syncGatesFromNetwork } from "./gate-discovery";
 import { GateEngine } from "./gate-engine";
+import { startPresence, stopPresence } from "./gate-presence";
 import { logger } from "./logger";
 import { RaceManagerListener } from "./race-manager-listener";
 
@@ -11,12 +12,7 @@ type BrainState = {
   gateEngine: GateEngine | null;
   raceManagerListener: RaceManagerListener | null;
   initialized: boolean;
-  discoveryTimer: NodeJS.Timeout | null;
 };
-
-const DISCOVERY_INTERVAL_MS = Number(
-  process.env.GATESTAGE_DISCOVERY_INTERVAL_MS ?? 15_000,
-);
 
 function brainState(): BrainState {
   const globalStore = globalThis as typeof globalThis & {
@@ -27,7 +23,6 @@ function brainState(): BrainState {
       gateEngine: null,
       raceManagerListener: null,
       initialized: false,
-      discoveryTimer: null,
     };
   }
   return globalStore[GLOBAL_BRAIN_KEY];
@@ -45,26 +40,6 @@ export function getRaceBrain() {
   };
 }
 
-async function runGateDiscovery() {
-  try {
-    const result = await syncGatesFromNetwork();
-
-    if (
-      result.added.length > 0 ||
-      result.updated.length > 0 ||
-      result.removed.length > 0
-    ) {
-      logger.info(
-        "discovery",
-        `scan result added=${result.added.join(",") || "none"} updated=${result.updated.join(",") || "none"} removed=${result.removed.join(",") || "none"}`,
-      );
-      broadcaster.emitConfigUpdated();
-    }
-  } catch (err) {
-    logger.error("discovery", "scan failed", err);
-  }
-}
-
 export function initRaceBrain() {
   const state = brainState();
   if (state.initialized) return getRaceBrain();
@@ -79,10 +54,10 @@ export function initRaceBrain() {
   );
   state.raceManagerListener.start();
 
-  void runGateDiscovery();
-  state.discoveryTimer = setInterval(() => {
-    void runGateDiscovery();
-  }, DISCOVERY_INTERVAL_MS);
+  startPresence();
+  void syncGatesFromNetwork().catch((err) => {
+    logger.error("discovery", "initial scan failed", err);
+  });
 
   logger.info("race-brain", "initialized");
   return getRaceBrain();
@@ -93,8 +68,7 @@ export function shutdownRaceBrain() {
   const state = brainState();
   state.raceManagerListener?.stop();
   state.raceManagerListener = null;
-  if (state.discoveryTimer) clearInterval(state.discoveryTimer);
-  state.discoveryTimer = null;
+  stopPresence();
   state.initialized = false;
 }
 

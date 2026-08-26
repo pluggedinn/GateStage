@@ -2,26 +2,30 @@
 
 import {
   createContext,
+  type ReactNode,
   useContext,
   useEffect,
   useState,
-  type ReactNode,
 } from "react";
 import { io, type Socket } from "socket.io-client";
+import type {
+  GateHealth,
+  GateHealthEvent,
+  GateHealthSnapshot,
+} from "@/lib/gate-health";
 import {
   DEFAULT_INTEGRATION_ID,
   type RaceManagerConnectionState,
 } from "@/lib/integrations";
-import type {
-  RaceActionEnvelope,
-  RaceEventEnvelope,
-} from "@/lib/types";
+import type { RaceActionEnvelope, RaceEventEnvelope } from "@/lib/types";
 
 type RaceSocketValue = {
   events: RaceEventEnvelope[];
   actions: RaceActionEnvelope[];
   connection: RaceManagerConnectionState;
   connected: boolean;
+  healthById: Record<string, GateHealth>;
+  configRevision: number;
 };
 
 const defaultConnectionState: RaceManagerConnectionState = {
@@ -35,9 +39,12 @@ const RaceSocketContext = createContext<RaceSocketValue | null>(null);
 export function RaceSocketProvider({ children }: { children: ReactNode }) {
   const [events, setEvents] = useState<RaceEventEnvelope[]>([]);
   const [actions, setActions] = useState<RaceActionEnvelope[]>([]);
-  const [connection, setConnection] =
-    useState<RaceManagerConnectionState>(defaultConnectionState);
+  const [connection, setConnection] = useState<RaceManagerConnectionState>(
+    defaultConnectionState,
+  );
   const [connected, setConnected] = useState(false);
+  const [healthById, setHealthById] = useState<Record<string, GateHealth>>({});
+  const [configRevision, setConfigRevision] = useState(0);
 
   useEffect(() => {
     const socket: Socket = io({
@@ -56,6 +63,23 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
     socket.on("connection:raceManager", (state: RaceManagerConnectionState) => {
       setConnection(state);
     });
+    socket.on("gate:health:snapshot", (snapshot: GateHealthSnapshot) => {
+      setHealthById(snapshot);
+    });
+    socket.on("gate:health", (event: GateHealthEvent) => {
+      setHealthById((prev) => ({
+        ...prev,
+        [event.gateId]: {
+          online: event.online,
+          lastSeenAt: event.lastSeenAt,
+          rssi: event.rssi,
+          tempC: event.tempC,
+        },
+      }));
+    });
+    socket.on("config:updated", () => {
+      setConfigRevision((n) => n + 1);
+    });
 
     return () => {
       socket.disconnect();
@@ -64,7 +88,14 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
 
   return (
     <RaceSocketContext.Provider
-      value={{ events, actions, connection, connected }}
+      value={{
+        events,
+        actions,
+        connection,
+        connected,
+        healthById,
+        configRevision,
+      }}
     >
       {children}
     </RaceSocketContext.Provider>

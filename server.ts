@@ -4,6 +4,7 @@ import { parse } from "node:url";
 import next from "next";
 import { Server as SocketServer } from "socket.io";
 import { broadcaster } from "./lib/broadcaster";
+import { getHealthSnapshot } from "./lib/gate-presence";
 import { getLogFilePath, initLogger, logger } from "./lib/logger";
 import {
   getRaceBrain,
@@ -57,6 +58,7 @@ app
         },
       );
       broadcaster.replayRecent(socket);
+      broadcaster.emitGateHealthSnapshot(getHealthSnapshot(), socket);
       socket.on("disconnect", () => {
         logger.info("socket.io", `client disconnected ${socket.id}`);
       });

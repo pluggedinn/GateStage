@@ -72,4 +72,34 @@ test.describe("Gates discovery", () => {
     const afterDiscover = (await afterDiscoverRes.json()) as { id: string }[];
     expect(afterDiscover.map((g) => g.id)).toEqual(swapped);
   });
+
+  test("forget removes a gate until the next sighting", async ({ page }) => {
+    await page.request.post("/api/gates/discover");
+    await page.goto("/gates");
+    await expect(page.getByTestId("gate-row-gate-2")).toBeVisible();
+
+    const forgetRes = await page.request.delete("/api/gates/gate-2");
+    expect(forgetRes.ok()).toBeTruthy();
+
+    await page.reload();
+    await expect(page.getByTestId("gate-row-gate-2")).toHaveCount(0);
+
+    await page.request.post("/api/gates/discover");
+    await page.reload();
+    await expect(page.getByTestId("gate-row-gate-2")).toBeVisible();
+  });
+
+  test("live health shows last-seen and mock telemetry", async ({ page }) => {
+    await page.request.post("/api/gates/discover");
+    await page.goto("/gates");
+    await expect(page.getByTestId("gate-status-gate-start")).toContainText(
+      /Online|Offline/,
+    );
+    await expect
+      .poll(async () => page.getByTestId("gate-rssi-gate-start").innerText())
+      .toMatch(/dBm/);
+    await expect
+      .poll(async () => page.getByTestId("gate-temp-gate-start").innerText())
+      .toMatch(/°/);
+  });
 });

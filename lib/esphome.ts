@@ -2,8 +2,8 @@ import { percentToEsphome } from "@/lib/brightness";
 import { getDefaultBrightnessPercent } from "@/lib/config/store";
 import {
   EFFECT_BY_ID,
-  mergeEffectParams,
   type EffectParamDef,
+  mergeEffectParams,
 } from "@/lib/effects";
 
 /** ESPHome light entity name — fixed across all gates */
@@ -134,8 +134,9 @@ export async function sendEsphomeCommand(
 
 export async function pingGate(host: string): Promise<boolean> {
   const base = hostBase(host);
-  const timeoutMs = Number(process.env.GATESTAGE_GATE_PING_TIMEOUT_MS ?? 5000);
-  for (const path of ["/health", "/"]) {
+  const timeoutMs = Number(process.env.GATESTAGE_GATE_PING_TIMEOUT_MS ?? 800);
+  const lightPath = `/light/${entityPath(DEFAULT_LIGHT_ENTITY)}`;
+  for (const path of [lightPath, "/health", "/"]) {
     try {
       const res = await fetch(`${base}${path}`, {
         method: "GET",

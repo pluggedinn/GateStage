@@ -1,7 +1,12 @@
 import { NextResponse } from "next/server";
 import { getGates } from "@/lib/config/store";
+import { getHealth } from "@/lib/gate-presence";
 
-/** List discovered gates in track order. */
+/** List known gates in track order, with live health. */
 export async function GET() {
-  return NextResponse.json(getGates());
+  const gates = getGates().map((gate) => ({
+    ...gate,
+    ...getHealth(gate.id),
+  }));
+  return NextResponse.json(gates);
 }
