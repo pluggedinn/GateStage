@@ -2,9 +2,11 @@ import { NextResponse } from "next/server";
 import { getGate, getGates } from "@/lib/config/store";
 import type { EsphomeCommand } from "@/lib/esphome";
 import { sendEsphomeCommand } from "@/lib/esphome";
+import { logger } from "@/lib/logger";
 
 type Params = { params: Promise<{ gateId: string }> };
 
+/** Send an ESPHome command to one gate, or to every enabled gate when `gateId` is `all`. */
 export async function POST(request: Request, { params }: Params) {
   const { gateId } = await params;
   const body = (await request.json()) as EsphomeCommand;
@@ -20,6 +22,12 @@ export async function POST(request: Request, { params }: Params) {
     );
     const failed = results.filter((r) => !r.ok);
 
+    logger.info(
+      "manual",
+      `all gates command failed=${failed.length}/${results.length}`,
+      body,
+    );
+
     return NextResponse.json({
       ok: failed.length === 0,
       status: failed[0]?.status,
@@ -34,5 +42,10 @@ export async function POST(request: Request, { params }: Params) {
   }
 
   const res = await sendEsphomeCommand(gate.host, body);
+  logger.info(
+    "manual",
+    `${gateId} ${res.ok ? "ok" : `HTTP ${res.status}`} host=${gate.host}`,
+    body,
+  );
   return NextResponse.json({ ok: res.ok, status: res.status });
 }

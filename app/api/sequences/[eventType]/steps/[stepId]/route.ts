@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import { broadcaster } from "@/lib/broadcaster";
 import { eventSequenceSchema } from "@/lib/config/schema";
 import { getSequence, saveConfig } from "@/lib/config/store";
+import { logger } from "@/lib/logger";
 
 type Params = {
   params: Promise<{ eventType: string; stepId: string }>;
 };
 
+/** Remove one step from the routine for this event type. */
 export async function DELETE(_request: Request, { params }: Params) {
   const { eventType, stepId } = await params;
   const existing = getSequence(eventType);
@@ -32,6 +34,7 @@ export async function DELETE(_request: Request, { params }: Params) {
     }),
   }));
 
+  logger.info("routines", `removed step ${stepId} from ${eventType}`);
   broadcaster.emitConfigUpdated();
   return NextResponse.json(updated);
 }

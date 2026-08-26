@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { logger } from "@/lib/logger";
 import { type RaceEvent, raceEventSchema } from "@/lib/types";
 import type { AdapterCallbacks, RaceManagerAdapter } from "./types";
 
@@ -65,13 +66,13 @@ export class NextAdapter implements RaceManagerAdapter {
     try {
       this.ws = new WebSocket(this.url);
     } catch (err) {
-      console.error("[next-adapter] connect failed:", err);
+      logger.error("next-adapter", "connect failed", err);
       this.scheduleReconnect();
       return;
     }
 
     this.ws.on("open", () => {
-      console.log("[next-adapter] connected to", this.url);
+      logger.info("next-adapter", `connected to ${this.url}`);
       this.setConnected(true);
     });
 
@@ -81,14 +82,14 @@ export class NextAdapter implements RaceManagerAdapter {
 
     this.ws.on("close", () => {
       if (this.stopped) return;
-      console.log("[next-adapter] disconnected");
+      logger.info("next-adapter", "disconnected");
       this.setConnected(false);
       this.scheduleReconnect();
     });
 
     this.ws.on("error", (err) => {
       if (this.stopped) return;
-      console.error("[next-adapter] error:", err.message);
+      logger.error("next-adapter", `error: ${err.message}`);
     });
   }
 
@@ -106,13 +107,13 @@ export class NextAdapter implements RaceManagerAdapter {
     try {
       parsed = JSON.parse(raw);
     } catch {
-      console.warn("[next-adapter] invalid JSON:", raw.slice(0, 200));
+      logger.warn("next-adapter", `invalid JSON: ${raw.slice(0, 200)}`);
       return;
     }
 
     const result = raceEventSchema.safeParse(parsed);
     if (!result.success) {
-      console.warn("[next-adapter] invalid event:", result.error.message);
+      logger.warn("next-adapter", `invalid event: ${result.error.message}`);
       return;
     }
 

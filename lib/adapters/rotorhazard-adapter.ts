@@ -1,4 +1,5 @@
 import { io, type Socket } from "socket.io-client";
+import { logger } from "@/lib/logger";
 import type { Pilot, RaceEvent } from "@/lib/types";
 import type { AdapterCallbacks, RaceManagerAdapter } from "./types";
 
@@ -151,7 +152,7 @@ export class RotorHazardAdapter implements RaceManagerAdapter {
     });
 
     this.socket.on("connect", () => {
-      console.log("[rotorhazard-adapter] connected to", origin);
+      logger.info("rotorhazard-adapter", `connected to ${origin}`);
       this.setConnected(true);
       // Request current state (same pattern as RH web client on page load).
       this.socket?.emit("load_data", {
@@ -160,12 +161,12 @@ export class RotorHazardAdapter implements RaceManagerAdapter {
     });
 
     this.socket.on("disconnect", () => {
-      console.log("[rotorhazard-adapter] disconnected");
+      logger.info("rotorhazard-adapter", "disconnected");
       this.setConnected(false);
     });
 
     this.socket.on("connect_error", (err: Error) => {
-      console.error("[rotorhazard-adapter] connect error:", err.message);
+      logger.error("rotorhazard-adapter", `connect error: ${err.message}`);
     });
 
     this.registerRaceEvents();
@@ -226,15 +227,17 @@ export class RotorHazardAdapter implements RaceManagerAdapter {
 
     if (!eventType) {
       if (prev !== status) {
-        console.debug(
-          `[rotorhazard-adapter] race_status ${prev ?? "?"} → ${status} (no gate event)`,
+        logger.debug(
+          "rotorhazard-adapter",
+          `race_status ${prev ?? "?"} → ${status} (no gate event)`,
         );
       }
       return;
     }
 
-    console.log(
-      `[rotorhazard-adapter] race_status ${prev ?? "?"} → ${status} → ${eventType}`,
+    logger.info(
+      "rotorhazard-adapter",
+      `race_status ${prev ?? "?"} → ${status} → ${eventType}`,
     );
     this.emitHeatEvent(eventType);
   }
@@ -268,8 +271,9 @@ export class RotorHazardAdapter implements RaceManagerAdapter {
       });
     }
 
-    console.log(
-      `[rotorhazard-adapter] current_heat ${heatId} → heat.loaded (${pilots.length} pilots)`,
+    logger.info(
+      "rotorhazard-adapter",
+      `current_heat ${heatId} → heat.loaded (${pilots.length} pilots)`,
     );
     this.callbacks.onEvent({
       type: "heat.loaded",
@@ -303,8 +307,9 @@ export class RotorHazardAdapter implements RaceManagerAdapter {
           ? latestLap.lap_number + 1
           : laps.length;
 
-      console.log(
-        `[rotorhazard-adapter] current_laps node ${nodeIndex} lap ${lapNumber} → pilot.crossing`,
+      logger.info(
+        "rotorhazard-adapter",
+        `current_laps node ${nodeIndex} lap ${lapNumber} → pilot.crossing`,
       );
       this.callbacks.onEvent({
         type: "pilot.crossing",

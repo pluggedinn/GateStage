@@ -110,6 +110,8 @@ Full hardware and networking context lives in [AGENTS.md](./AGENTS.md#architectu
 Settings are stored in `data/config.json` (gitignored).
 Gates sync from the network via mDNS on startup and every 15 seconds.
 
+Operational logs append to `data/gatestage.log` (same directory as config; desktop app: OS user data dir). Restarts keep writing to the same file. Override with `GATESTAGE_LOG_PATH`. Open **Logs** in the UI to tail the file, or read it on disk after a race day. At ~10 MB the file rotates once to `gatestage.log.1`.
+
 Trigger a scan anytime:
 
 ```sh
