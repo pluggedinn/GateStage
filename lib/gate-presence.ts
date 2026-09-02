@@ -24,6 +24,7 @@ const GLOBAL_PRESENCE_KEY = "__gatestage_gate_presence__";
 
 type PresenceState = {
   healthById: Map<string, GateHealth>;
+  rttById: Map<string, number>;
   socket: dgram.Socket | null;
   pingTimer: NodeJS.Timeout | null;
   sweepTimer: NodeJS.Timeout | null;
@@ -37,11 +38,15 @@ function presenceState(): PresenceState {
   if (!globalStore[GLOBAL_PRESENCE_KEY]) {
     globalStore[GLOBAL_PRESENCE_KEY] = {
       healthById: new Map(),
+      rttById: new Map(),
       socket: null,
       pingTimer: null,
       sweepTimer: null,
       lock: Promise.resolve(),
     };
+  }
+  if (!globalStore[GLOBAL_PRESENCE_KEY].rttById) {
+    globalStore[GLOBAL_PRESENCE_KEY].rttById = new Map();
   }
   return globalStore[GLOBAL_PRESENCE_KEY];
 }
@@ -108,9 +113,16 @@ function markSeen(
   emitHealth(gateId);
 }
 
-export function recordPingResult(gateId: string, online: boolean) {
+export function recordPingResult(
+  gateId: string,
+  online: boolean,
+  rttMs?: number | null,
+) {
   if (online) {
     markSeen(gateId);
+    if (typeof rttMs === "number" && Number.isFinite(rttMs) && rttMs >= 0) {
+      presenceState().rttById.set(gateId, rttMs);
+    }
     return;
   }
   const previous = getHealth(gateId);
@@ -118,6 +130,10 @@ export function recordPingResult(gateId: string, online: boolean) {
     presenceState().healthById.set(gateId, { ...previous, online: false });
     emitHealth(gateId);
   }
+}
+
+export function getLatestRttMs(gateId: string): number | null {
+  return presenceState().rttById.get(gateId) ?? null;
 }
 
 function sweepOffline() {
@@ -218,8 +234,10 @@ async function pingKnownHosts() {
   const gates = getGates();
   await Promise.all(
     gates.map(async (gate) => {
+      const started = Date.now();
       const online = await pingGate(gate.host);
-      recordPingResult(gate.id, online);
+      const rttMs = online ? Date.now() - started : null;
+      recordPingResult(gate.id, online, rttMs);
       if (!online) {
         logger.debug("presence", `ping miss ${gate.id} host=${gate.host}`);
       }
@@ -291,4 +309,5 @@ export function stopPresence() {
 /** Test helper. */
 export function resetPresenceMemory() {
   presenceState().healthById.clear();
+  presenceState().rttById.clear();
 }

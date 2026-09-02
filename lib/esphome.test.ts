@@ -129,4 +129,57 @@ describe("sendEsphomeCommand retries", () => {
     );
     assert.equal(calls, 3);
   });
+
+  test("writes strobe start delay last and does not retry it", async () => {
+    const urls: string[] = [];
+    let startDelayCalls = 0;
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("FX%20Strobe%20Start%20Delay")) {
+        startDelayCalls += 1;
+        if (startDelayCalls === 1) throw new TypeError("fetch failed");
+      }
+      return okResponse();
+    }) as typeof fetch;
+
+    await assert.rejects(
+      () =>
+        sendEsphomeCommand("10.0.0.2:80", {
+          kind: "effect",
+          effectId: "strobe",
+          params: {
+            period_ms: 240,
+            on_ms: 80,
+            start_delay_ms: 250,
+          },
+          brightnessPercent: 5,
+          r: 255,
+          g: 0,
+          b: 0,
+        }),
+      (err: unknown) => {
+        assert.ok(err instanceof TypeError);
+        return true;
+      },
+    );
+
+    const startDelayIndex = urls.findIndex((url) =>
+      url.includes("FX%20Strobe%20Start%20Delay"),
+    );
+    const periodIndex = urls.findIndex((url) =>
+      url.includes("FX%20Strobe%20Period"),
+    );
+    const onIndex = urls.findIndex((url) =>
+      url.includes("FX%20Strobe%20On%20Time"),
+    );
+    const turnOnIndex = urls.findIndex((url) => url.includes("/light/"));
+    assert.ok(periodIndex >= 0);
+    assert.ok(onIndex >= 0);
+    assert.ok(startDelayIndex >= 0);
+    assert.equal(turnOnIndex, -1);
+    assert.ok(startDelayIndex > periodIndex);
+    assert.ok(startDelayIndex > onIndex);
+    assert.equal(startDelayCalls, 1);
+  });
 });

@@ -15,6 +15,7 @@ export type ChoreographyContext = {
   gates: Gate[];
   event: RaceEvent;
   sleep: (ms: number) => Promise<void>;
+  rttMsForGate: (gateId: string) => number | null;
   sendToGate: (
     gate: Gate,
     command: EsphomeCommand,

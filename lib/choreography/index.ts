@@ -124,8 +124,10 @@ export function defaultChoreographyParams(
   return def.defaultParams() as Record<string, number | boolean | string>;
 }
 
-export type { ChoreographyEasing } from "./timing";
 export {
-  CHOREOGRAPHY_EASING_OPTIONS,
-  computeInterGateDelays,
+  computeTunnelSchedule,
+  DEFAULT_STAGGER_MS,
+  MIN_STAGGER_MS,
+  resolveTunnelStaggerMs,
+  TUNNEL_LEAD_MS,
 } from "./timing";

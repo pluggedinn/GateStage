@@ -1,5 +1,4 @@
 import { expect, test } from "@playwright/test";
-import { ESPHOME_MOCK_FLEET } from "../lib/dev/esphome-mock-fleet";
 import {
   emitNextEvent,
   getEsphomeStateForGate,
@@ -25,6 +24,25 @@ async function resetRoutineSteps(eventType: string) {
   }
 }
 
+function strobeStartDelay(state: {
+  commands: Array<{
+    entity: string;
+    action: string;
+    params: Record<string, string>;
+  }>;
+}): number | null {
+  const command = [...state.commands]
+    .reverse()
+    .find(
+      (entry) =>
+        entry.action === "number_set" &&
+        entry.entity === "FX Strobe Start Delay",
+    );
+  if (!command) return null;
+  const value = Number(command.params.value);
+  return Number.isFinite(value) ? value : null;
+}
+
 test.describe("Tunnel choreography", () => {
   test.beforeEach(async () => {
     await resetEsphome();
@@ -32,9 +50,14 @@ test.describe("Tunnel choreography", () => {
 
     const gatesRes = await fetch(`${API}/api/gates`);
     const gates = (await gatesRes.json()) as { id: string }[];
-    const orderedIds = ["gate-start", "gate-2", "gate-3", "gate-4", "gate-5", "gate-finish"].filter(
-      (id) => gates.some((g) => g.id === id),
-    );
+    const orderedIds = [
+      "gate-start",
+      "gate-2",
+      "gate-3",
+      "gate-4",
+      "gate-5",
+      "gate-finish",
+    ].filter((id) => gates.some((g) => g.id === id));
     if (orderedIds.length >= 2) {
       await fetch(`${API}/api/gates/reorder`, {
         method: "POST",
@@ -46,7 +69,7 @@ test.describe("Tunnel choreography", () => {
     await resetRoutineSteps("heat.finished");
   });
 
-  test("heat.finished runs tunnel in gate order then turns all off", async () => {
+  test("heat.finished arms strobe on every gate with increasing start delays", async () => {
     const stepRes = await fetch(`${API}/api/sequences/heat.finished/steps`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -62,8 +85,8 @@ test.describe("Tunnel choreography", () => {
             g: 0,
             b: 0,
             brightnessPercent: 5,
-            durationMs: 800,
-            easing: "easeInQuad",
+            staggerMs: 80,
+            onMs: 80,
           },
         },
       }),
@@ -72,40 +95,50 @@ test.describe("Tunnel choreography", () => {
 
     await emitNextEvent("heat.finished");
 
+    const orderedIds = [
+      "gate-start",
+      "gate-2",
+      "gate-3",
+      "gate-4",
+      "gate-5",
+      "gate-finish",
+    ];
+
     await expect
       .poll(async () => {
-        const start = await getEsphomeStateForGate("gate-start");
-        const second = await getEsphomeStateForGate("gate-2");
-        const startOn = start.commands.some((c) => c.action === "turn_on");
-        const secondOn = second.commands.some((c) => c.action === "turn_on");
-        return startOn && secondOn;
+        const states = await Promise.all(
+          orderedIds.map((id) => getEsphomeStateForGate(id)),
+        );
+        return states.every((state) =>
+          state.commands.some(
+            (command) =>
+              command.action === "turn_on" &&
+              command.params.effect === "Strobe",
+          ),
+        );
       })
       .toBe(true);
 
-    const startState = await getEsphomeStateForGate("gate-start");
-    const secondState = await getEsphomeStateForGate("gate-2");
-    const startOn = startState.commands.find((c) => c.action === "turn_on");
-    const secondOn = secondState.commands.find((c) => c.action === "turn_on");
-    expect(startOn).toBeTruthy();
-    expect(secondOn).toBeTruthy();
-    if (!startOn || !secondOn) return;
-    expect(Date.parse(startOn.at)).toBeLessThan(Date.parse(secondOn.at));
+    const delays: number[] = [];
+    for (const id of orderedIds) {
+      const state = await getEsphomeStateForGate(id);
+      const turnOn = state.commands.find(
+        (command) =>
+          command.action === "turn_on" && command.params.effect === "Strobe",
+      );
+      expect(turnOn).toBeTruthy();
+      expect(turnOn?.params.r).toBe("255");
+      expect(
+        state.commands.some((command) => command.action === "turn_off"),
+      ).toBe(false);
+      const delay = strobeStartDelay(state);
+      expect(delay).not.toBeNull();
+      delays.push(delay ?? 0);
+    }
 
-    await expect
-      .poll(
-        async () => {
-          const states = await Promise.all(
-            ESPHOME_MOCK_FLEET.slice(0, 3).map((g) =>
-              getEsphomeStateForGate(g.id),
-            ),
-          );
-          return states.every((state) =>
-            state.commands.some((c) => c.action === "turn_off"),
-          );
-        },
-        { timeout: 15_000 },
-      )
-      .toBe(true);
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i]).toBeGreaterThan(delays[i - 1] ?? 0);
+    }
   });
 
   test("rejects choreography when target is not all gates", async () => {
@@ -123,8 +156,7 @@ test.describe("Tunnel choreography", () => {
             r: 255,
             g: 0,
             b: 0,
-            durationMs: 1000,
-            easing: "easeInQuad",
+            staggerMs: 80,
           },
         },
       }),

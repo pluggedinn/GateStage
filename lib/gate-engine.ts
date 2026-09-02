@@ -10,6 +10,7 @@ import {
 } from "@/lib/config/store";
 import { describeEffectAction } from "@/lib/effects";
 import { type EsphomeCommand, sendEsphomeCommand } from "@/lib/esphome";
+import { getLatestRttMs } from "@/lib/gate-presence";
 import { ingestRaceEvent, resolvePilotColor } from "@/lib/heat-state";
 import { logger } from "@/lib/logger";
 import type { RaceEventType } from "@/lib/race-events";
@@ -107,11 +108,6 @@ export class GateEngine {
     for (const step of steps) {
       await this.runStep(step, event, enabledGates);
     }
-
-    const lastStep = steps[steps.length - 1];
-    if (isChoreographyStep(lastStep)) {
-      await this.turnOffAll(enabledGates);
-    }
   }
 
   private async runStep(
@@ -137,6 +133,7 @@ export class GateEngine {
         gates: enabledGates,
         event,
         sleep,
+        rttMsForGate: (gateId) => getLatestRttMs(gateId),
         sendToGate: async (gate, command, commandLabel) =>
           this.sendCommandToGate(gate, command, commandLabel),
       });
@@ -207,14 +204,6 @@ export class GateEngine {
         error: err instanceof Error ? err.message : "Unknown error",
       };
     }
-  }
-
-  private async turnOffAll(gates: Gate[]) {
-    await Promise.allSettled(
-      gates.map((gate) =>
-        this.sendCommandToGate(gate, { kind: "off" }, "turn_off"),
-      ),
-    );
   }
 
   private resolveTargets(
@@ -302,8 +291,4 @@ export class GateEngine {
     }
     return `rgb(${command.r},${command.g},${command.b}) @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%`;
   }
-}
-
-function isChoreographyStep(step: SequenceStep | undefined): boolean {
-  return step?.kind === "action" && step.action.kind === "choreography";
 }
