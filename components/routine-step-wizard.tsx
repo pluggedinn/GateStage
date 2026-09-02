@@ -2,9 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { BrightnessControl } from "@/components/brightness-control";
-import { GateTargetPicker } from "@/components/gate-target-picker";
 import { ColorSourcePicker } from "@/components/color-source-picker";
 import { EffectPicker, type EffectSelection } from "@/components/effect-picker";
+import { GateTargetPicker } from "@/components/gate-target-picker";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -17,23 +17,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  CHOREOGRAPHY_EASING_OPTIONS,
   choreographyIdFromActionKind,
+  DEFAULT_STAGGER_MS,
   defaultChoreographyParams,
   getChoreographyWizardOptions,
   isChoreographyActionKind,
 } from "@/lib/choreography";
-import {
-  type ColorSource,
-  eventSupportsPilotColor,
-} from "@/lib/color-source";
+import { type ColorSource, eventSupportsPilotColor } from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
 import { defaultEffectSelection, EFFECT_BY_ID } from "@/lib/effects";
 import { getRaceEventDef, type RaceEventType } from "@/lib/race-events";
@@ -60,8 +50,7 @@ const ACTION_KINDS = [
 
 const CHOREOGRAPHY_ACTION_KINDS = getChoreographyWizardOptions();
 
-type StandardActionKind = (typeof ACTION_KINDS)[number]["id"];
-type ActionKind = StandardActionKind | `choreography:${string}`;
+type ActionKind = (typeof ACTION_KINDS)[number]["id"];
 type StepKind = "action" | "delay";
 
 type RoutineStepWizardProps = {
@@ -87,6 +76,7 @@ export function RoutineStepWizard({
   const [delaySeconds, setDelaySeconds] = useState("1");
   const [target, setTarget] = useState("all");
   const [actionKind, setActionKind] = useState<ActionKind>("solid");
+  const [trackEffectId, setTrackEffectId] = useState<string | null>(null);
   const [effect, setEffect] = useState<EffectSelection>(
     defaultEffectSelection("pulse"),
   );
@@ -96,26 +86,27 @@ export function RoutineStepWizard({
   const [brightnessPercent, setBrightnessPercent] = useState(
     defaultBrightnessPercent,
   );
-  const [tunnelDurationSeconds, setTunnelDurationSeconds] = useState("3");
-  const [tunnelEasing, setTunnelEasing] = useState("easeInQuad");
+  const [tunnelStaggerMs, setTunnelStaggerMs] = useState(
+    String(DEFAULT_STAGGER_MS),
+  );
+  const [tunnelOnMs, setTunnelOnMs] = useState(String(DEFAULT_STAGGER_MS));
   const [submitting, setSubmitting] = useState(false);
 
-  const availableActionKinds = useMemo(() => {
-    const standard = ACTION_KINDS.map((kind) => ({
-      id: kind.id as ActionKind,
-      label: kind.label,
+  const availableActionKinds = ACTION_KINDS;
+
+  const trackEffectGroups = useMemo(() => {
+    if (target !== "all") return [];
+    const options = CHOREOGRAPHY_ACTION_KINDS.map((kind) => ({
+      id: kind.actionKind,
+      name: kind.label,
       description: kind.description,
     }));
-    const choreographies =
-      target === "all"
-        ? CHOREOGRAPHY_ACTION_KINDS.map((kind) => ({
-            id: kind.actionKind,
-            label: kind.label,
-            description: kind.description,
-          }))
-        : [];
-    return [...standard, ...choreographies];
+    if (options.length === 0) return [];
+    return [{ label: "Track", options }];
   }, [target]);
+
+  const tunnelSelected =
+    actionKind === "effect" && trackEffectId === "choreography:tunnel";
 
   const stepLabels = useMemo(() => {
     if (stepKind === "delay") return ["Type", "Wait"];
@@ -130,20 +121,21 @@ export function RoutineStepWizard({
     setDelaySeconds("1");
     setTarget("all");
     setActionKind("solid");
+    setTrackEffectId(null);
     setEffect(defaultEffectSelection("pulse"));
     setRgb({ r: 0, g: 255, b: 0 });
     setColorSource("fixed");
     setBrightnessPercent(defaultBrightnessPercent);
-    setTunnelDurationSeconds("3");
-    setTunnelEasing("easeInQuad");
+    setTunnelStaggerMs(String(DEFAULT_STAGGER_MS));
+    setTunnelOnMs(String(DEFAULT_STAGGER_MS));
     setSubmitting(false);
   }, [open, eventType, defaultBrightnessPercent]);
 
   useEffect(() => {
-    if (target !== "all" && isChoreographyActionKind(actionKind)) {
-      setActionKind("solid");
+    if (target !== "all") {
+      setTrackEffectId(null);
     }
-  }, [target, actionKind]);
+  }, [target]);
 
   useEffect(() => {
     if (!showPilotColorOption && colorSource === "pilot") {
@@ -152,27 +144,30 @@ export function RoutineStepWizard({
   }, [showPilotColorOption, colorSource]);
 
   function buildAction(): MappingAction {
-    if (isChoreographyActionKind(actionKind)) {
-      const choreographyId = choreographyIdFromActionKind(actionKind);
-      if (choreographyId === "tunnel") {
-        const seconds = Number(tunnelDurationSeconds);
+    if (actionKind === "effect" && trackEffectId) {
+      if (isChoreographyActionKind(trackEffectId)) {
+        const choreographyId = choreographyIdFromActionKind(trackEffectId);
+        if (choreographyId === "tunnel") {
+          const staggerMs = Number(tunnelStaggerMs);
+          const onMs = Number(tunnelOnMs);
+          return {
+            kind: "choreography",
+            choreographyId: "tunnel",
+            params: {
+              colorSource,
+              ...(colorSource === "fixed" ? rgb : {}),
+              brightnessPercent,
+              staggerMs: Math.round(staggerMs),
+              onMs: Math.round(onMs),
+            },
+          };
+        }
         return {
           kind: "choreography",
-          choreographyId: "tunnel",
-          params: {
-            colorSource,
-            ...(colorSource === "fixed" ? rgb : {}),
-            brightnessPercent,
-            durationMs: Math.round(seconds * 1000),
-            easing: tunnelEasing,
-          },
+          choreographyId,
+          params: defaultChoreographyParams(choreographyId),
         };
       }
-      return {
-        kind: "choreography",
-        choreographyId,
-        params: defaultChoreographyParams(choreographyId),
-      };
     }
     if (actionKind === "effect") {
       const effectDef = EFFECT_BY_ID.get(effect.effectId);
@@ -246,12 +241,15 @@ export function RoutineStepWizard({
     }
     if (wizardStep === 1) return Boolean(target);
     if (wizardStep === 2) return Boolean(actionKind);
-    if (
-      isChoreographyActionKind(actionKind) &&
-      actionKind === "choreography:tunnel"
-    ) {
-      const seconds = Number(tunnelDurationSeconds);
-      return Number.isFinite(seconds) && seconds > 0;
+    if (tunnelSelected) {
+      const staggerMs = Number(tunnelStaggerMs);
+      const onMs = Number(tunnelOnMs);
+      return (
+        Number.isFinite(staggerMs) &&
+        staggerMs >= 20 &&
+        Number.isFinite(onMs) &&
+        onMs >= 10
+      );
     }
     return true;
   }
@@ -403,58 +401,6 @@ export function RoutineStepWizard({
 
           {wizardStep === 3 &&
             stepKind === "action" &&
-            actionKind === "choreography:tunnel" && (
-              <div className="space-y-4">
-                <ColorSourcePicker
-                  label="Color"
-                  showPilotOption={showPilotColorOption}
-                  colorSource={colorSource}
-                  onColorSourceChange={setColorSource}
-                  rgb={rgb}
-                  onRgbChange={setRgb}
-                />
-                <BrightnessControl
-                  value={brightnessPercent}
-                  onChange={setBrightnessPercent}
-                />
-                <div className="space-y-2">
-                  <Label htmlFor="tunnel-duration">Duration (seconds)</Label>
-                  <Input
-                    id="tunnel-duration"
-                    type="number"
-                    min={0.1}
-                    step={0.1}
-                    value={tunnelDurationSeconds}
-                    onChange={(e) => setTunnelDurationSeconds(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tunnel-easing">Acceleration</Label>
-                  <Select
-                    value={tunnelEasing}
-                    onValueChange={(v) => v && setTunnelEasing(v)}
-                    items={CHOREOGRAPHY_EASING_OPTIONS.map((o) => ({
-                      value: o.value,
-                      label: o.label,
-                    }))}
-                  >
-                    <SelectTrigger id="tunnel-easing">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {CHOREOGRAPHY_EASING_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            )}
-
-          {wizardStep === 3 &&
-            stepKind === "action" &&
             actionKind === "off" && (
               <p className="text-sm text-muted-foreground">
                 Gates will turn off when this step runs.
@@ -464,13 +410,71 @@ export function RoutineStepWizard({
           {wizardStep === 3 &&
             stepKind === "action" &&
             actionKind === "effect" && (
-              <EffectPicker
-                value={effect}
-                onChange={setEffect}
-                colorSource={colorSource}
-                onColorSourceChange={setColorSource}
-                showPilotColorOption={showPilotColorOption}
-              />
+              <>
+                <EffectPicker
+                  value={effect}
+                  onChange={setEffect}
+                  colorSource={colorSource}
+                  onColorSourceChange={setColorSource}
+                  showPilotColorOption={showPilotColorOption}
+                  extraGroups={trackEffectGroups}
+                  extraSelectedId={trackEffectId}
+                  onExtraSelect={(id) => {
+                    setTrackEffectId(id);
+                    if (
+                      id &&
+                      effect.r !== undefined &&
+                      effect.g !== undefined &&
+                      effect.b !== undefined
+                    ) {
+                      setRgb({ r: effect.r, g: effect.g, b: effect.b });
+                    }
+                  }}
+                />
+                {tunnelSelected && (
+                  <div className="space-y-4">
+                    <ColorSourcePicker
+                      label="Color"
+                      showPilotOption={showPilotColorOption}
+                      colorSource={colorSource}
+                      onColorSourceChange={setColorSource}
+                      rgb={rgb}
+                      onRgbChange={setRgb}
+                    />
+                    <div className="space-y-2">
+                      <Label htmlFor="tunnel-stagger">Stagger (ms)</Label>
+                      <Input
+                        id="tunnel-stagger"
+                        type="number"
+                        min={20}
+                        step={10}
+                        value={tunnelStaggerMs}
+                        onChange={(e) => setTunnelStaggerMs(e.target.value)}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Delay between consecutive gates. Lap{" "}
+                        {Number.isFinite(Number(tunnelStaggerMs))
+                          ? Math.max(0, Math.round(Number(tunnelStaggerMs))) *
+                            Math.max(gates.length, 1)
+                          : "—"}
+                        ms with {Math.max(gates.length, 1)}{" "}
+                        {gates.length === 1 ? "gate" : "gates"}.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="tunnel-on">Pulse length (ms)</Label>
+                      <Input
+                        id="tunnel-on"
+                        type="number"
+                        min={10}
+                        step={10}
+                        value={tunnelOnMs}
+                        onChange={(e) => setTunnelOnMs(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                )}
+              </>
             )}
 
           {wizardStep === 3 &&
@@ -488,9 +492,7 @@ export function RoutineStepWizard({
 
           {wizardStep === 3 &&
             stepKind === "action" &&
-            (actionKind === "effect" ||
-              actionKind === "solid" ||
-              actionKind === "choreography:tunnel") && (
+            (actionKind === "solid" || actionKind === "effect") && (
               <BrightnessControl
                 value={brightnessPercent}
                 onChange={setBrightnessPercent}

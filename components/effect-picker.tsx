@@ -28,6 +28,17 @@ import { cn } from "@/lib/utils";
 
 export type { EffectSelection };
 
+export type ExtraEffectOption = {
+  id: string;
+  name: string;
+  description: string;
+};
+
+export type ExtraEffectGroup = {
+  label: string;
+  options: ExtraEffectOption[];
+};
+
 type EffectPickerProps = {
   value: EffectSelection;
   onChange: (value: EffectSelection) => void;
@@ -37,6 +48,9 @@ type EffectPickerProps = {
   colorSource?: ColorSource;
   onColorSourceChange?: (source: ColorSource) => void;
   showPilotColorOption?: boolean;
+  extraGroups?: ExtraEffectGroup[];
+  extraSelectedId?: string | null;
+  onExtraSelect?: (id: string | null) => void;
 };
 
 const BASIC_EFFECTS = EFFECT_CATALOG.filter((e) => e.category === "basic");
@@ -62,14 +76,27 @@ export function EffectPicker({
   colorSource = "fixed",
   onColorSourceChange,
   showPilotColorOption = false,
+  extraGroups = [],
+  extraSelectedId = null,
+  onExtraSelect,
 }: EffectPickerProps) {
-  const effect = EFFECT_CATALOG.find((e) => e.id === value.effectId);
+  const extraOptions = extraGroups.flatMap((group) => group.options);
+  const extra = extraOptions.find((option) => option.id === extraSelectedId);
+  const effect = extra
+    ? undefined
+    : EFFECT_CATALOG.find((e) => e.id === value.effectId);
   const mergedParams = useMemo(
     () => mergeEffectParams(value.effectId, value.params),
     [value.effectId, value.params],
   );
 
   function setEffectId(effectId: string) {
+    const extraMatch = extraOptions.find((option) => option.id === effectId);
+    if (extraMatch) {
+      onExtraSelect?.(extraMatch.id);
+      return;
+    }
+    onExtraSelect?.(null);
     const next = defaultEffectSelection(effectId);
     const prev = EFFECT_BY_ID.get(value.effectId);
     const picked = EFFECT_BY_ID.get(effectId);
@@ -94,19 +121,32 @@ export function EffectPicker({
     });
   }
 
+  const selectValue = extra?.id ?? value.effectId;
+  const selectLabel = extra?.name ?? effect?.name ?? "Select effect";
+
   const effectSelect = (
     <div className="space-y-2">
       <Label>Effect</Label>
-      <Select value={value.effectId} onValueChange={(v) => v && setEffectId(v)}>
+      <Select value={selectValue} onValueChange={(v) => v && setEffectId(v)}>
         <SelectTrigger className={layout === "inline" ? "w-full" : "min-w-48"}>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">
             {effect ? (
               <EffectPreview effectId={effect.id} name={effect.name} />
             ) : null}
-            <span className="truncate">{effect?.name ?? "Select effect"}</span>
+            <span className="truncate">{selectLabel}</span>
           </div>
         </SelectTrigger>
         <SelectContent className="min-w-(--anchor-width) w-max max-w-none">
+          {extraGroups.map((group) => (
+            <SelectGroup key={group.label}>
+              <SelectLabel>{group.label}</SelectLabel>
+              {group.options.map((option) => (
+                <SelectItem key={option.id} value={option.id} className="py-2">
+                  <span>{option.name}</span>
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          ))}
           <SelectGroup>
             <SelectLabel>Basic</SelectLabel>
             {BASIC_EFFECTS.map((e) => (
@@ -130,14 +170,17 @@ export function EffectPicker({
     </div>
   );
 
-  const effectBlurb = effect ? (
-    <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
-      <EffectPreview effectId={effect.id} name={effect.name} />
-      <p className="text-xs leading-relaxed text-muted-foreground">
-        {effect.description}
-      </p>
-    </div>
-  ) : null;
+  const effectBlurb =
+    extra || effect ? (
+      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+        {effect ? (
+          <EffectPreview effectId={effect.id} name={effect.name} />
+        ) : null}
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          {extra?.description ?? effect?.description}
+        </p>
+      </div>
+    ) : null;
 
   const colorPanel =
     effect?.supportsColor &&
@@ -225,7 +268,9 @@ export function EffectPicker({
           {colorPanel}
           {paramsPanel}
         </div>
-        {effectBlurb ? <div className="md:col-span-2">{effectBlurb}</div> : null}
+        {effectBlurb ? (
+          <div className="md:col-span-2">{effectBlurb}</div>
+        ) : null}
       </div>
     );
   }

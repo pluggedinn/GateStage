@@ -90,13 +90,45 @@ export const EFFECT_CATALOG: EffectDef[] = [
     category: "basic",
     description: "Flash on and off in a chosen color",
     supportsColor: true,
-    params: [],
+    params: [
+      {
+        key: "period_ms",
+        label: "Period",
+        type: "milliseconds",
+        min: 20,
+        max: 60_000,
+        step: 10,
+        default: 400,
+        entityName: "FX Strobe Period",
+      },
+      {
+        key: "on_ms",
+        label: "On time",
+        type: "milliseconds",
+        min: 10,
+        max: 60_000,
+        step: 10,
+        default: 200,
+        entityName: "FX Strobe On Time",
+      },
+      {
+        key: "start_delay_ms",
+        label: "Start delay",
+        type: "milliseconds",
+        min: 0,
+        max: 60_000,
+        step: 10,
+        default: 0,
+        entityName: "FX Strobe Start Delay",
+      },
+    ],
   },
   {
     id: "addressable_color_wipe",
     name: "Color Wipe",
     category: "strip",
-    description: "Fill the strip LED by LED with a chosen color, then wipe it off",
+    description:
+      "Fill the strip LED by LED with a chosen color, then wipe it off",
     supportsColor: true,
     params: [
       {
@@ -232,7 +264,10 @@ export function defaultEffectSelection(effectId: string): EffectSelection {
   return selection;
 }
 
-export function resolveEffectId(effectId?: string, legacyName?: string): string {
+export function resolveEffectId(
+  effectId?: string,
+  legacyName?: string,
+): string {
   if (effectId && EFFECT_BY_ID.has(effectId)) return effectId;
   if (legacyName) {
     const byName = EFFECT_BY_NAME.get(legacyName);
@@ -243,7 +278,9 @@ export function resolveEffectId(effectId?: string, legacyName?: string): string 
   return "pulse";
 }
 
-export function defaultEffectParams(effectId: string): Record<string, number | boolean> {
+export function defaultEffectParams(
+  effectId: string,
+): Record<string, number | boolean> {
   const effect = EFFECT_BY_ID.get(effectId);
   if (!effect) return {};
   return Object.fromEntries(

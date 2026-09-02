@@ -142,14 +142,15 @@ When GateStage runs an effect it:
 | Active LEDs | Strip length (all effects) |
 | FX Rainbow Speed / Width | Rainbow |
 | FX Pulse Transition / Cycle Interval / Min Brightness / Max Brightness | Pulse |
+| FX Strobe Period / On Time / Start Delay | Strobe |
 | FX Color Wipe Interval / Reverse | Color Wipe |
 | FX Comet Width / Count / Interval / Max Brightness / Reverse | Comet |
 
-Strobe has no tunable parameters (flashes the selected color on/off at 400ms). Color Wipe fills the active range with the selected color, then wipes to off.
+Strobe defaults to a 400ms cycle with 200ms on (same look as the old hardcoded flash). Period, on-time, and start delay are runtime-tunable. Color Wipe fills the active range with the selected color, then wipes to off.
 
 All five effects only animate the active LED range; pixels above that stay off.
 
-**Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample), Strobe on/off timing.
+**Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample).
 
 See [ESPHome light effects](https://esphome.io/components/light/index.html#light-effects) for parameter semantics.
 

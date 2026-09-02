@@ -79,9 +79,10 @@ function errorMessage(err: unknown) {
 async function esphomeFetch(
   url: string,
   init: RequestInit = {},
+  options: { retries?: number } = {},
 ): Promise<Response> {
   const timeoutMs = commandTimeoutMs();
-  const retries = commandRetries();
+  const retries = options.retries ?? commandRetries();
   const delayMs = commandRetryDelayMs();
   const attempts = retries + 1;
   const target = describeFetchTarget(url);
@@ -131,18 +132,19 @@ async function setEffectParamEntity(
   base: string,
   param: EffectParamDef,
   value: number | boolean,
+  options: { retries?: number } = {},
 ): Promise<void> {
   if (!param.entityName || param.yamlOnly) return;
 
   if (param.type === "bool") {
     const action = value ? "turn_on" : "turn_off";
     const url = `${base}/switch/${entityPath(param.entityName)}/${action}`;
-    await esphomeFetch(url, { method: "POST" });
+    await esphomeFetch(url, { method: "POST" }, options);
     return;
   }
 
   const url = `${base}/number/${entityPath(param.entityName)}/set?value=${paramValueForEntity(param, value)}`;
-  await esphomeFetch(url, { method: "POST" });
+  await esphomeFetch(url, { method: "POST" }, options);
 }
 
 export async function sendEsphomeCommand(
@@ -167,13 +169,24 @@ export async function sendEsphomeCommand(
     }
 
     const params = mergeEffectParams(command.effectId, command.params);
+    const startDelayKey = "start_delay_ms";
     await Promise.all(
-      effect.params.map((param) => {
-        const value = params[param.key];
-        if (value === undefined) return Promise.resolve();
-        return setEffectParamEntity(base, param, value);
-      }),
+      effect.params
+        .filter((param) => param.key !== startDelayKey)
+        .map((param) => {
+          const value = params[param.key];
+          if (value === undefined) return Promise.resolve();
+          return setEffectParamEntity(base, param, value);
+        }),
     );
+    const startDelayParam = effect.params.find(
+      (param) => param.key === startDelayKey,
+    );
+    if (startDelayParam && params[startDelayKey] !== undefined) {
+      await setEffectParamEntity(base, startDelayParam, params[startDelayKey], {
+        retries: 0,
+      });
+    }
 
     const q = new URLSearchParams({
       effect: effect.name,

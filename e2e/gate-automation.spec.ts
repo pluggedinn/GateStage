@@ -5,13 +5,52 @@ import {
   waitForEsphomeCommands,
 } from "./helpers/mocks";
 
+const API = "http://127.0.0.1:8080";
+
+async function resetRoutineSteps(eventType: string) {
+  const res = await fetch(`${API}/api/sequences`);
+  const sequences = (await res.json()) as {
+    eventType: string;
+    steps: { id: string }[];
+  }[];
+  const sequence = sequences.find((s) => s.eventType === eventType);
+  if (!sequence) return;
+
+  for (const step of sequence.steps) {
+    await fetch(
+      `${API}/api/sequences/${encodeURIComponent(eventType)}/steps/${encodeURIComponent(step.id)}`,
+      { method: "DELETE" },
+    );
+  }
+}
+
 test.describe("Gate automation", () => {
   test.beforeEach(async () => {
     await resetEsphome();
-    await fetch("http://127.0.0.1:8080/api/gates/discover", { method: "POST" });
+    await fetch(`${API}/api/gates/discover`, { method: "POST" });
+    await resetRoutineSteps("heat.go");
   });
 
   test("heat.go triggers green RGB on mock ESPHome gates", async ({ page }) => {
+    const stepRes = await fetch(`${API}/api/sequences/heat.go/steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        target: "all",
+        targetGateId: null,
+        action: {
+          kind: "solid",
+          colorSource: "fixed",
+          r: 0,
+          g: 255,
+          b: 0,
+          brightnessPercent: 5,
+        },
+      }),
+    });
+    expect(stepRes.ok).toBeTruthy();
+
     await page.goto("/");
     const connections = page.getByTestId("connection-status");
     await expect(connections).toBeVisible({ timeout: 15_000 });

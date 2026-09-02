@@ -15,7 +15,7 @@
 #
 # Effects match `lib/effects.ts`: Pulse, Strobe, Color Wipe, Rainbow, Comet.
 # All effects respect Active LEDs (shift/animate only the active range).
-# Rainbow, Pulse, Color Wipe, and Comet params are runtime-tunable via REST.
+# Rainbow, Pulse, Strobe, Color Wipe, and Comet params are runtime-tunable via REST.
 
 substitutions:
   gate_id: "1"
@@ -139,6 +139,18 @@ globals:
     type: int
     restore_value: false
     initial_value: "100"
+  - id: g_strobe_period_ms
+    type: int
+    restore_value: false
+    initial_value: "400"
+  - id: g_strobe_on_ms
+    type: int
+    restore_value: false
+    initial_value: "200"
+  - id: g_strobe_origin_ms
+    type: uint32
+    restore_value: false
+    initial_value: "0"
   - id: g_wipe_interval_ms
     type: int
     restore_value: false
@@ -251,6 +263,39 @@ number:
       - globals.set:
           id: g_pulse_max_brightness
           value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Strobe Period"
+    optimistic: true
+    min_value: 20
+    max_value: 60000
+    step: 10
+    initial_value: 400
+    set_action:
+      - globals.set:
+          id: g_strobe_period_ms
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Strobe On Time"
+    optimistic: true
+    min_value: 10
+    max_value: 60000
+    step: 10
+    initial_value: 200
+    set_action:
+      - globals.set:
+          id: g_strobe_on_ms
+          value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Strobe Start Delay"
+    optimistic: true
+    min_value: 0
+    max_value: 60000
+    step: 10
+    initial_value: 0
+    set_action:
+      - globals.set:
+          id: g_strobe_origin_ms
+          value: !lambda "return millis() + (uint32_t) x;"
   - platform: template
     name: "FX Color Wipe Interval"
     optimistic: true
@@ -475,17 +520,18 @@ light:
           name: Strobe
           update_interval: 16ms
           lambda: |-
-            static uint32_t phase_origin = 0;
             const int active = id(g_active_leds);
             const int size = it.size();
             const int count = active < size ? active : size;
             if (count <= 0) return;
-            if (initial_run) {
-              phase_origin = millis();
-            }
-            // 400ms on/off cycle matches the UI preview (fxStrobe / led-strobe-flash).
-            const uint32_t cycle_ms = 400;
-            const bool on = ((millis() - phase_origin) % cycle_ms) < (cycle_ms / 2);
+            // Origin is stamped when FX Strobe Start Delay is set (millis + delay),
+            // not on initial_run — re-arming a running Strobe must re-phase.
+            const uint32_t period_ms = (uint32_t) id(g_strobe_period_ms);
+            const uint32_t on_ms = (uint32_t) id(g_strobe_on_ms);
+            const uint32_t safe_period = period_ms < 1 ? 1 : period_ms;
+            const int32_t elapsed = (int32_t) (millis() - id(g_strobe_origin_ms));
+            const bool on =
+                elapsed >= 0 && ((uint32_t) elapsed % safe_period) < on_ms;
             const esphome::Color c = on ? current_color : esphome::Color(0, 0, 0);
             it.range(0, count - 1) = c;
             if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
