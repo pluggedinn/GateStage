@@ -89,6 +89,7 @@
   --status-warn: oklch(0.58 0.14 75);
   --status-error: oklch(0.55 0.2 25);
   --status-muted: oklch(0.55 0.02 265);
+  --brand-cyan: #0a9bb8;
 }
 
 .dark {
@@ -127,6 +128,7 @@
   --status-warn: oklch(0.78 0.14 75);
   --status-error: oklch(0.65 0.2 25);
   --status-muted: oklch(0.45 0.02 265);
+  --brand-cyan: #79f2fd;
 }
 
 @layer base {
@@ -205,4 +207,62 @@
 
 .led-animate-scan {
   animation: led-scan-sweep 2s linear infinite;
+}
+
+/* Nav wordmark — logo cyan tube, glow stays on the glyphs. */
+@keyframes brand-wordmark-breathe {
+  0%,
+  100% {
+    filter: brightness(0.94);
+    text-shadow:
+      0 0 0.5px var(--brand-cyan),
+      0 0 1.5px color-mix(in oklch, var(--brand-cyan) 50%, transparent);
+  }
+  42% {
+    filter: brightness(1.08);
+    text-shadow:
+      0 0 0.6px var(--brand-cyan),
+      0 0 2.25px color-mix(in oklch, var(--brand-cyan) 65%, transparent);
+  }
+}
+
+@keyframes brand-wordmark-breathe-dark {
+  0%,
+  100% {
+    filter: brightness(0.94);
+    text-shadow:
+      0 0 0.6px var(--brand-cyan),
+      0 0 2.5px color-mix(in oklch, var(--brand-cyan) 60%, transparent);
+  }
+  42% {
+    filter: brightness(1.1);
+    text-shadow:
+      0 0 0.75px var(--brand-cyan),
+      0 0 3.5px color-mix(in oklch, var(--brand-cyan) 75%, transparent);
+  }
+}
+
+.brand-wordmark {
+  color: var(--brand-cyan);
+  animation: brand-wordmark-breathe 4.2s ease-in-out infinite;
+}
+
+.dark .brand-wordmark {
+  animation-name: brand-wordmark-breathe-dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-wordmark {
+    animation: none;
+    filter: none;
+    text-shadow:
+      0 0 0.5px var(--brand-cyan),
+      0 0 1.75px color-mix(in oklch, var(--brand-cyan) 55%, transparent);
+  }
+
+  .dark .brand-wordmark {
+    text-shadow:
+      0 0 0.6px var(--brand-cyan),
+      0 0 2.75px color-mix(in oklch, var(--brand-cyan) 70%, transparent);
+  }
 }

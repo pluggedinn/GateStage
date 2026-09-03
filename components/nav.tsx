@@ -26,8 +26,18 @@ export function Nav() {
   return (
     <header className="border-b border-border bg-card">
       <div className="mx-auto flex max-w-6xl items-center gap-4 px-4 py-3 sm:gap-6">
-        <Link href="/" className="text-lg font-semibold text-status-ok">
-          GateStage
+        <Link
+          href="/"
+          className="flex shrink-0 items-center gap-1 text-lg font-semibold"
+        >
+          <img
+            src="/gatestage-logo.png"
+            alt=""
+            width={164}
+            height={128}
+            className="h-8 w-auto"
+          />
+          <span className="brand-wordmark whitespace-nowrap">GateStage</span>
         </Link>
         <nav className="flex flex-1 gap-1 overflow-x-auto text-base">
           {links.map((link) => {
