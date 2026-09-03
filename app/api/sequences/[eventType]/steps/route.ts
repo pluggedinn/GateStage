@@ -4,7 +4,9 @@ import { broadcaster } from "@/lib/broadcaster";
 import { validateChoreographyAction } from "@/lib/choreography";
 import {
   actionUsesPilotColorSource,
+  actionUsesWinnerColorSource,
   eventSupportsPilotColor,
+  eventSupportsWinnerColor,
 } from "@/lib/color-source";
 import { eventSequenceSchema } from "@/lib/config/schema";
 import { getSequence, saveConfig } from "@/lib/config/store";
@@ -39,6 +41,18 @@ export async function POST(request: Request, { params }: Params) {
         {
           error:
             "Pilot color is only available for heat.finished and pilot.crossing routines",
+        },
+        { status: 400 },
+      );
+    }
+
+    if (
+      actionUsesWinnerColorSource(parsed.data.action) &&
+      !eventSupportsWinnerColor(eventType)
+    ) {
+      return NextResponse.json(
+        {
+          error: "Winner color is only available for heat.finished routines",
         },
         { status: 400 },
       );

@@ -1,6 +1,6 @@
 import { describeChoreographyAction } from "@/lib/choreography";
 import { rgbToHex } from "@/lib/color";
-import { describeColorSource } from "@/lib/color-source";
+import { describeColorSource, isDynamicColorSource } from "@/lib/color-source";
 import { describeEffectAction } from "@/lib/effects";
 import type { MappingAction, MappingTarget, SequenceStep } from "@/lib/types";
 
@@ -21,14 +21,13 @@ export function describeStepTarget(
 export function describeGateAction(action: MappingAction): string {
   if (action.kind === "effect") {
     const effectId = action.effectId ?? action.name ?? "pulse";
-    const colorLabel =
-      action.colorSource === "pilot"
-        ? ` · ${describeColorSource("pilot")}`
-        : action.r !== undefined &&
-            action.g !== undefined &&
-            action.b !== undefined
-          ? ` · ${rgbToHex({ r: action.r, g: action.g, b: action.b })}`
-          : "";
+    const colorLabel = isDynamicColorSource(action.colorSource)
+      ? ` · ${describeColorSource(action.colorSource)}`
+      : action.r !== undefined &&
+          action.g !== undefined &&
+          action.b !== undefined
+        ? ` · ${rgbToHex({ r: action.r, g: action.g, b: action.b })}`
+        : "";
     return (
       describeEffectAction(effectId, action.params) +
       colorLabel +
@@ -36,9 +35,9 @@ export function describeGateAction(action: MappingAction): string {
     );
   }
   if (action.kind === "solid") {
-    if (action.colorSource === "pilot") {
+    if (isDynamicColorSource(action.colorSource)) {
       return (
-        describeColorSource("pilot") +
+        describeColorSource(action.colorSource) +
         brightnessSuffix(action.brightnessPercent)
       );
     }

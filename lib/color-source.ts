@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { type Rgb, rgbToHex } from "@/lib/color";
-import { resolvePilotColor } from "@/lib/heat-state";
+import { resolvePilotColor, resolveWinnerColor } from "@/lib/heat-state";
 import type { RaceEvent } from "@/lib/types";
 
-export const colorSourceSchema = z.enum(["fixed", "pilot"]);
+export const colorSourceSchema = z.enum(["fixed", "pilot", "winner"]);
 
 export type ColorSource = z.infer<typeof colorSourceSchema>;
 
@@ -12,10 +12,16 @@ export const PILOT_COLOR_EVENT_TYPES = [
   "pilot.crossing",
 ] as const;
 
+export const WINNER_COLOR_EVENT_TYPES = ["heat.finished"] as const;
+
 export type PilotColorEventType = (typeof PILOT_COLOR_EVENT_TYPES)[number];
 
 export function eventSupportsPilotColor(eventType: string): boolean {
   return (PILOT_COLOR_EVENT_TYPES as readonly string[]).includes(eventType);
+}
+
+export function eventSupportsWinnerColor(eventType: string): boolean {
+  return (WINNER_COLOR_EVENT_TYPES as readonly string[]).includes(eventType);
 }
 
 export type ActionColorFields = {
@@ -29,10 +35,19 @@ export function isPilotColorSource(colorSource?: ColorSource): boolean {
   return colorSource === "pilot";
 }
 
+export function isWinnerColorSource(colorSource?: ColorSource): boolean {
+  return colorSource === "winner";
+}
+
+export function isDynamicColorSource(colorSource?: ColorSource): boolean {
+  return isPilotColorSource(colorSource) || isWinnerColorSource(colorSource);
+}
+
 export function describeColorSource(
   colorSource?: ColorSource,
   rgb?: Rgb,
 ): string {
+  if (isWinnerColorSource(colorSource)) return "Winner color";
   if (isPilotColorSource(colorSource)) return "Pilot color";
   if (
     rgb &&
@@ -49,6 +64,10 @@ export function resolveActionColor(
   fields: ActionColorFields,
   event: RaceEvent,
 ): { r: number; g: number; b: number } | null {
+  if (isWinnerColorSource(fields.colorSource)) {
+    return resolveWinnerColor();
+  }
+
   if (isPilotColorSource(fields.colorSource)) {
     return resolvePilotColor(event);
   }
@@ -64,18 +83,31 @@ export function resolveActionColor(
   return null;
 }
 
-export function actionUsesPilotColorSource(action: {
+type ColorSourceAction = {
   kind: string;
   colorSource?: ColorSource;
   params?: Record<string, unknown>;
-}): boolean {
-  if (action.kind === "pilot_color") return true;
-  if (action.colorSource === "pilot") return true;
+};
+
+function actionColorSource(action: ColorSourceAction): ColorSource | undefined {
+  if (action.kind === "pilot_color") return "pilot";
+  if (action.colorSource) return action.colorSource;
   if (
     action.kind === "choreography" &&
-    action.params?.colorSource === "pilot"
+    (action.params?.colorSource === "pilot" ||
+      action.params?.colorSource === "winner")
   ) {
-    return true;
+    return action.params.colorSource;
   }
-  return false;
+  return undefined;
+}
+
+export function actionUsesPilotColorSource(action: ColorSourceAction): boolean {
+  return actionColorSource(action) === "pilot";
+}
+
+export function actionUsesWinnerColorSource(
+  action: ColorSourceAction,
+): boolean {
+  return actionColorSource(action) === "winner";
 }

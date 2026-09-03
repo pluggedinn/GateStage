@@ -23,7 +23,12 @@ import {
   getChoreographyWizardOptions,
   isChoreographyActionKind,
 } from "@/lib/choreography";
-import { type ColorSource, eventSupportsPilotColor } from "@/lib/color-source";
+import {
+  type ColorSource,
+  eventSupportsPilotColor,
+  eventSupportsWinnerColor,
+  isDynamicColorSource,
+} from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
 import { defaultEffectSelection, EFFECT_BY_ID } from "@/lib/effects";
 import { getRaceEventDef, type RaceEventType } from "@/lib/race-events";
@@ -83,6 +88,7 @@ export function RoutineStepWizard({
   const [rgb, setRgb] = useState({ r: 0, g: 255, b: 0 });
   const [colorSource, setColorSource] = useState<ColorSource>("fixed");
   const showPilotColorOption = eventSupportsPilotColor(eventType);
+  const showWinnerColorOption = eventSupportsWinnerColor(eventType);
   const [brightnessPercent, setBrightnessPercent] = useState(
     defaultBrightnessPercent,
   );
@@ -138,10 +144,19 @@ export function RoutineStepWizard({
   }, [target]);
 
   useEffect(() => {
-    if (!showPilotColorOption && colorSource === "pilot") {
+    if (colorSource === "pilot" && !showPilotColorOption) {
       setColorSource("fixed");
     }
-  }, [showPilotColorOption, colorSource]);
+    if (colorSource === "winner" && !showWinnerColorOption) {
+      setColorSource("fixed");
+    }
+  }, [showPilotColorOption, showWinnerColorOption, colorSource]);
+
+  function persistableColorSource(): ColorSource {
+    if (colorSource === "winner" && showWinnerColorOption) return "winner";
+    if (colorSource === "pilot" && showPilotColorOption) return "pilot";
+    return "fixed";
+  }
 
   function buildAction(): MappingAction {
     if (actionKind === "effect" && trackEffectId) {
@@ -150,12 +165,13 @@ export function RoutineStepWizard({
         if (choreographyId === "tunnel") {
           const staggerMs = Number(tunnelStaggerMs);
           const onMs = Number(tunnelOnMs);
+          const source = persistableColorSource();
           return {
             kind: "choreography",
             choreographyId: "tunnel",
             params: {
-              colorSource,
-              ...(colorSource === "fixed" ? rgb : {}),
+              colorSource: source,
+              ...(source === "fixed" ? rgb : {}),
               brightnessPercent,
               staggerMs: Math.round(staggerMs),
               onMs: Math.round(onMs),
@@ -178,8 +194,9 @@ export function RoutineStepWizard({
         brightnessPercent,
       };
       if (effectDef?.supportsColor) {
-        if (colorSource === "pilot" && showPilotColorOption) {
-          return { ...base, colorSource: "pilot" as const };
+        const source = persistableColorSource();
+        if (isDynamicColorSource(source)) {
+          return { ...base, colorSource: source };
         }
         return {
           ...base,
@@ -196,8 +213,9 @@ export function RoutineStepWizard({
       return base;
     }
     if (actionKind === "solid") {
-      if (colorSource === "pilot" && showPilotColorOption) {
-        return { kind: "solid", colorSource: "pilot", brightnessPercent };
+      const source = persistableColorSource();
+      if (isDynamicColorSource(source)) {
+        return { kind: "solid", colorSource: source, brightnessPercent };
       }
       return {
         kind: "solid",
@@ -417,6 +435,7 @@ export function RoutineStepWizard({
                   colorSource={colorSource}
                   onColorSourceChange={setColorSource}
                   showPilotColorOption={showPilotColorOption}
+                  showWinnerColorOption={showWinnerColorOption}
                   extraGroups={trackEffectGroups}
                   extraSelectedId={trackEffectId}
                   onExtraSelect={(id) => {
@@ -436,6 +455,7 @@ export function RoutineStepWizard({
                     <ColorSourcePicker
                       label="Color"
                       showPilotOption={showPilotColorOption}
+                      showWinnerOption={showWinnerColorOption}
                       colorSource={colorSource}
                       onColorSourceChange={setColorSource}
                       rgb={rgb}
@@ -483,6 +503,7 @@ export function RoutineStepWizard({
               <ColorSourcePicker
                 label="Color"
                 showPilotOption={showPilotColorOption}
+                showWinnerOption={showWinnerColorOption}
                 colorSource={colorSource}
                 onColorSourceChange={setColorSource}
                 rgb={rgb}

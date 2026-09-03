@@ -48,6 +48,7 @@ type EffectPickerProps = {
   colorSource?: ColorSource;
   onColorSourceChange?: (source: ColorSource) => void;
   showPilotColorOption?: boolean;
+  showWinnerColorOption?: boolean;
   extraGroups?: ExtraEffectGroup[];
   extraSelectedId?: string | null;
   onExtraSelect?: (id: string | null) => void;
@@ -76,6 +77,7 @@ export function EffectPicker({
   colorSource = "fixed",
   onColorSourceChange,
   showPilotColorOption = false,
+  showWinnerColorOption = false,
   extraGroups = [],
   extraSelectedId = null,
   onExtraSelect,
@@ -187,10 +189,11 @@ export function EffectPicker({
     value.r !== undefined &&
     value.g !== undefined &&
     value.b !== undefined ? (
-      showPilotColorOption && onColorSourceChange ? (
+      (showPilotColorOption || showWinnerColorOption) && onColorSourceChange ? (
         <ColorSourcePicker
           label="Color"
-          showPilotOption
+          showPilotOption={showPilotColorOption}
+          showWinnerOption={showWinnerColorOption}
           colorSource={colorSource}
           onColorSourceChange={onColorSourceChange}
           rgb={{ r: value.r, g: value.g, b: value.b }}
