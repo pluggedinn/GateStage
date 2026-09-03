@@ -115,6 +115,11 @@ function startServer() {
   return waitForHealth(boundPort);
 }
 
+function resolveAppIcon() {
+  const iconPath = path.join(__dirname, "build", "icon.png");
+  return fs.existsSync(iconPath) ? iconPath : undefined;
+}
+
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -122,6 +127,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 640,
     title: "GateStage",
+    icon: resolveAppIcon(),
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
