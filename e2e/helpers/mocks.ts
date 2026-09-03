@@ -45,6 +45,15 @@ export async function emitNextEvent(type: string) {
   if (!res.ok) throw new Error(`emit failed: ${res.status}`);
 }
 
+export async function emitNextWire(event: Record<string, unknown>) {
+  const res = await fetch(`${NEXT_MOCK_HTTP}/emit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+  });
+  if (!res.ok) throw new Error(`emit failed: ${res.status}`);
+}
+
 export async function waitForEsphomeCommands(
   minCount: number,
   timeoutMs = 5000,

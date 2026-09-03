@@ -17,6 +17,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { DEFAULT_BRIGHTNESS_PERCENT } from "@/lib/brightness";
 import { rgbToHex } from "@/lib/color";
+import { isDynamicColorSource } from "@/lib/color-source";
 import type { EventSequence, Gate } from "@/lib/config/schema";
 import { RACE_EVENT_TYPES, type RaceEventType } from "@/lib/race-events";
 import {
@@ -183,7 +184,7 @@ export default function RoutinesPage() {
 
   function renderActionSwatch(action: MappingAction) {
     if (action.kind === "solid") {
-      if (action.colorSource === "pilot") return null;
+      if (isDynamicColorSource(action.colorSource)) return null;
       if (
         action.r !== undefined &&
         action.g !== undefined &&
@@ -196,7 +197,7 @@ export default function RoutinesPage() {
     if (action.kind === "pilot_color") return null;
     if (
       action.kind === "effect" &&
-      action.colorSource !== "pilot" &&
+      !isDynamicColorSource(action.colorSource) &&
       action.r !== undefined &&
       action.g !== undefined &&
       action.b !== undefined

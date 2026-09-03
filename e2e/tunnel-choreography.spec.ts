@@ -200,4 +200,40 @@ test.describe("Tunnel choreography", () => {
     });
     expect(stepRes.ok).toBeTruthy();
   });
+
+  test("rejects winner color on routines other than heat.finished", async () => {
+    const stepRes = await fetch(`${API}/api/sequences/heat.go/steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        target: "all",
+        targetGateId: null,
+        action: {
+          kind: "solid",
+          colorSource: "winner",
+          brightnessPercent: 5,
+        },
+      }),
+    });
+    expect(stepRes.status).toBe(400);
+  });
+
+  test("accepts winner color on heat.finished routines", async () => {
+    const stepRes = await fetch(`${API}/api/sequences/heat.finished/steps`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "action",
+        target: "all",
+        targetGateId: null,
+        action: {
+          kind: "solid",
+          colorSource: "winner",
+          brightnessPercent: 5,
+        },
+      }),
+    });
+    expect(stepRes.ok).toBeTruthy();
+  });
 });

@@ -13,6 +13,7 @@ type ColorSourcePickerProps = {
   onRgbChange: (rgb: Rgb) => void;
   /** When false, only custom RGB is available. */
   showPilotOption?: boolean;
+  showWinnerOption?: boolean;
   label?: string;
   className?: string;
 };
@@ -23,21 +24,33 @@ export function ColorSourcePicker({
   rgb,
   onRgbChange,
   showPilotOption = false,
+  showWinnerOption = false,
   label = "Color",
   className,
 }: ColorSourcePickerProps) {
+  const options: { value: ColorSource; label: string }[] = [
+    { value: "fixed", label: "Custom" },
+  ];
+  if (showPilotOption) {
+    options.push({ value: "pilot", label: "Pilot color" });
+  }
+  if (showWinnerOption) {
+    options.push({ value: "winner", label: "Winner color" });
+  }
+  const showSourceToggle = showPilotOption || showWinnerOption;
+
   return (
     <div className={cn("space-y-3", className)}>
-      {showPilotOption ? (
+      {showSourceToggle ? (
         <div className="space-y-2">
           <Label>{label}</Label>
-          <div className="grid grid-cols-2 gap-2">
-            {(
-              [
-                ["fixed", "Custom"],
-                ["pilot", "Pilot color"],
-              ] as const
-            ).map(([value, optionLabel]) => (
+          <div
+            className={cn(
+              "grid gap-2",
+              options.length > 2 ? "grid-cols-3" : "grid-cols-2",
+            )}
+          >
+            {options.map(({ value, label: optionLabel }) => (
               <button
                 key={value}
                 type="button"
@@ -59,12 +72,17 @@ export function ColorSourcePicker({
               Uses the pilot&apos;s assigned color when this routine runs.
             </p>
           ) : null}
+          {colorSource === "winner" ? (
+            <p className="text-xs text-muted-foreground">
+              First pilot to complete 3 laps this heat.
+            </p>
+          ) : null}
         </div>
       ) : null}
 
-      {colorSource === "fixed" || !showPilotOption ? (
+      {colorSource === "fixed" || !showSourceToggle ? (
         <ColorPicker
-          label={showPilotOption ? undefined : label}
+          label={showSourceToggle ? undefined : label}
           value={rgb}
           onChange={onRgbChange}
         />

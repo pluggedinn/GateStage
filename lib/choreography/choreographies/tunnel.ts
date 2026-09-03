@@ -4,7 +4,11 @@ import {
   resolveBrightnessPercent,
 } from "@/lib/brightness";
 import { rgbToHex } from "@/lib/color";
-import { colorSourceSchema, resolveActionColor } from "@/lib/color-source";
+import {
+  colorSourceSchema,
+  describeColorSource,
+  resolveActionColor,
+} from "@/lib/color-source";
 import {
   computeTunnelSchedule,
   DEFAULT_STAGGER_MS,
@@ -105,8 +109,8 @@ export const tunnelChoreography: ChoreographyDef<TunnelParams> = {
     const staggerMs = params.staggerMs ?? DEFAULT_STAGGER_MS;
     const onMs = params.onMs ?? staggerMs;
     const colorLabel =
-      params.colorSource === "pilot"
-        ? "Pilot color"
+      params.colorSource === "pilot" || params.colorSource === "winner"
+        ? describeColorSource(params.colorSource)
         : rgbToHex({
             r: params.r ?? 0,
             g: params.g ?? 0,
