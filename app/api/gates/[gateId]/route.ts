@@ -6,7 +6,7 @@ import {
   rememberStartGateId,
   saveConfig,
 } from "@/lib/config/store";
-import { pingGate, sendEsphomeCommand } from "@/lib/esphome";
+import { pingGate, testGate } from "@/lib/esphome";
 import { clearHealth, getHealth, recordPingResult } from "@/lib/gate-presence";
 import { logger } from "@/lib/logger";
 
@@ -77,7 +77,7 @@ export async function DELETE(_request: Request, { params }: Params) {
   return NextResponse.json(gates);
 }
 
-/** Ping a gate for reachability, or run a rainbow test effect (`action: "ping" | "test"`). */
+/** Ping a gate for reachability, or blink it with Strobe then restore (`action: "ping" | "test"`). */
 export async function POST(request: Request, { params }: Params) {
   const { gateId } = await params;
   const body = (await request.json()) as { action?: "ping" | "test" };
@@ -97,13 +97,15 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ gateId, ...getHealth(gateId) });
   }
 
-  const res = await sendEsphomeCommand(gate.host, {
-    kind: "effect",
-    effectId: "addressable_rainbow",
-  });
-  logger.info(
-    "gates",
-    `test ${gateId} rainbow ${res.ok ? "ok" : `HTTP ${res.status}`} host=${gate.host}`,
-  );
-  return NextResponse.json({ ok: res.ok, status: res.status });
+  try {
+    await testGate(gate.host);
+    recordPingResult(gateId, true);
+    logger.info("gates", `test ${gateId} strobe ok host=${gate.host}`);
+    return NextResponse.json({ ok: true, gateId });
+  } catch (err) {
+    recordPingResult(gateId, false);
+    const message = err instanceof Error ? err.message : String(err);
+    logger.warn("gates", `test ${gateId} failed host=${gate.host}: ${message}`);
+    return NextResponse.json({ error: message }, { status: 502 });
+  }
 }

@@ -35,34 +35,22 @@ Edit the `wifi:` block in `gate.yaml` before flashing:
 
 ```yaml
 wifi:
-  ssid: "I dont take naps-5G"
-  password: "broccoli"
-  ap:
-    password: "broccoli"
+  networks:
+    - ssid: "I dont take naps-5G"
+      password: "broccoli"
+    - ssid: "Whoop Racing"
+      password: "tinywhoop"
+  band_mode: 5GHZ
+  fast_connect: true
 ```
 
-At a **race venue**, change `ssid` / `password` to the race AP (e.g. Nuclear Hazard: `Whoop Racing` / `tinywhoop`) and reflash, or use the fallback captive portal on race day.
-
-### WiFi behavior
-
-| Mode | When | SSID |
-|------|------|------|
-| **Station** | Your WiFi is available | `wifi.ssid` in `gate.yaml` |
-| **Fallback AP** | Cannot join WiFi within `ap_timeout` | `GateStage-<esphome.name>` (e.g. `GateStage-gate-start`) |
+At a **race venue**, the gate joins whichever of those SSIDs is present. There is **no fallback hotspot** — a dropout stays on the race channel and keeps retrying.
 
 Station mode is **5 GHz only** (`band_mode: 5GHZ`). Use a 5 GHz SSID (or a race AP on Channel 36).
 
-When a gate is in fallback AP mode, connect to `GateStage-<name>` and open **`http://192.168.4.1`**. You get:
+To change firmware (strip buffer size in `num_leds`, pins, effects), recompile and flash. **Active LED count** is runtime-tunable (see below). GateStage will not discover the gate until it joins your LAN WiFi.
 
-- **Captive portal** — change WiFi SSID/password if the network moved
-- **Web UI** — turn LEDs on/off, pick colors and effects (same as on LAN)
-- **REST API** — the HTTP endpoints GateStage uses
-
-That is **not** full ESPHome reconfiguration: you cannot edit YAML or add new components from the browser. To change firmware (strip buffer size in `num_leds`, pins, effects), recompile and flash. **Active LED count** is runtime-tunable (see below). GateStage will not discover the gate until it joins your LAN WiFi.
-
-### `ap_timeout`
-
-How long the gate keeps trying your configured WiFi before it turns on the fallback hotspot. We use **`60s`** in the sample (ESPHome default is `90s`). Set `ap_timeout: 0s` if you never want automatic fallback AP.
+`fast_connect: true` skips a full scan on reconnect and tries the last BSSID/channel first. With two SSIDs in the YAML, that is the last network that succeeded (home or race).
 
 ### API `encryption` (not needed here)
 
@@ -72,28 +60,27 @@ The `api:` block is ESPHome’s **native API** (port 6053) for Home Assistant an
 
 The sample uses a bare `api:` with no `encryption:` key. That is fine on a trusted race LAN. You can drop `api:` entirely if you never connect Home Assistant or the ESPHome app to the gate.
 
-### Gate ID = `esphome.name`
+### Gate ID = substitution `gate_id`
 
-The sample uses an ESPHome **substitution** so one YAML works for every gate:
+The sample uses an ESPHome **substitution** so one YAML works for every gate. Firmware hostname stays `gate` (plus a MAC suffix for unique mDNS) so compiling a second ID does not wipe the ESP-IDF tree. GateStage still identifies the device from the UDP beacon `id` (`gate-3`, `gate-start`, …).
 
 ```yaml
 substitutions:
   gate_id: "1"   # default; override at flash time
 
 esphome:
-  name: gate-${gate_id}           # ← GateStage gate id (e.g. gate-3, gate-start)
+  name: gate
   friendly_name: Gate ${gate_id}
+  name_add_mac_suffix: true
 ```
 
 Pass `gate_id` when flashing each physical device:
 
 ```bash
-esphome -s gate_id start run gate.yaml   # → gate-start
-esphome -s gate_id finish run gate.yaml  # → gate-finish
-esphome -s gate_id 3 run gate.yaml       # → gate-3
+esphome -s gate_id start run gate.yaml   # beacon id gate-start
+esphome -s gate_id finish run gate.yaml  # beacon id gate-finish
+esphome -s gate_id 3 run gate.yaml       # beacon id gate-3
 ```
-
-The fallback AP SSID (`GateStage-gate-<id>`) uses the same substitution.
 
 ---
 
@@ -102,7 +89,6 @@ The fallback AP SSID (`GateStage-gate-<id>`) uses the same substitution.
 | Component | Why |
 |-----------|-----|
 | `wifi` + `band_mode: 5GHZ` | Race LAN is 5 GHz only |
-| `wifi.ap` + `ap_timeout` | Setup hotspot when race WiFi is down |
 | `mdns` | ESPHome OTA / `*.local` only (GateStage does not query it) |
 | `udp` port **9420** | Presence beacon + WHO reply |
 | `wifi_signal` / `internal_temperature` | RSSI and chip temp in the beacon |
@@ -114,8 +100,10 @@ The fallback AP SSID (`GateStage-gate-<id>`) uses the same substitution.
 Every ~3s (and on WiFi connect / WHO) the gate broadcasts to `255.255.255.255:9420`:
 
 ```json
-{"v":1,"id":"gate-start","rssi":-62,"tC":47.5}
+{"v":1,"id":"gate-start","rssi":-62,"tC":47.5,"up":120,"dc":2,"rssiMin":-81}
 ```
+
+`up` is uptime seconds, `dc` is WiFi disconnects since boot, `rssiMin` is the worst RSSI since boot. Older firmware without those fields still works.
 
 GateStage learns `host` from the **sender IP**. Scan Now broadcasts `{"v":1,"q":"who"}` on the same port; gates reply with a beacon.
 
@@ -149,6 +137,8 @@ When GateStage runs an effect it:
 Strobe defaults to a 400ms cycle with 200ms on (same look as the old hardcoded flash). Period, on-time, and start delay are runtime-tunable. Color Wipe fills the active range with the selected color, then wipes to off.
 
 All five effects only animate the active LED range; pixels above that stay off.
+
+On boot the strip always starts **Rainbow at 60%**. Last color/effect is not restored (`restore_mode: ALWAYS_ON`). Active LED count is still remembered.
 
 **Firmware-only** (edit `gate.yaml` and reflash): `num_leds` buffer ceiling (400 in sample).
 
@@ -201,8 +191,10 @@ DHCP is fine (no static IP required). Optional **DHCP reservation** on your rout
 
 ```bash
 esphome -s gate_id start run gate.yaml
-# or: ./flash-gate.sh start
+# or: ./flash-gate.sh start --device 10.3.141.118 --no-logs
 ```
+
+`esphome.name` is stable (`gate`), so the first compile is a full ESP-IDF build and later `gate_id`s only rebuild `main.cpp`. Do not compile two IDs at once. `./flash-gate.sh` also enables **ccache**.
 
 ### Verify with GateStage
 

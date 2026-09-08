@@ -6,7 +6,9 @@ test.describe("Gates discovery", () => {
     await resetEsphome();
   });
 
-  test("scan discovers mock gate and test sends Rainbow", async ({ page }) => {
+  test("scan discovers mock gate and Test blinks then restores", async ({
+    page,
+  }) => {
     const discoverRes = await page.request.post("/api/gates/discover");
     expect(discoverRes.ok()).toBeTruthy();
 
@@ -19,18 +21,20 @@ test.describe("Gates discovery", () => {
       timeout: 10_000,
     });
 
-    const testRes = await page.request.post("/api/gates/gate-start", {
-      data: { action: "test" },
-    });
-    expect(testRes.ok()).toBeTruthy();
+    await expect(page.getByRole("button", { name: "Ping" })).toHaveCount(0);
+    await page.getByTestId("gate-test-gate-start").click();
 
     await expect
-      .poll(async () => {
-        const state = await getEsphomeState();
-        return state.commands.some(
-          (c) => c.action === "turn_on" && c.params.effect === "Rainbow",
-        );
-      })
+      .poll(
+        async () => {
+          const state = await getEsphomeState();
+          const turnOns = state.commands.filter((c) => c.action === "turn_on");
+          const blinked = turnOns.some((c) => c.params.effect === "Strobe");
+          const restored = turnOns.some((c) => c.params.effect === "Rainbow");
+          return blinked && restored;
+        },
+        { timeout: 10_000 },
+      )
       .toBe(true);
   });
 
@@ -98,6 +102,16 @@ test.describe("Gates discovery", () => {
     await expect
       .poll(async () => page.getByTestId("gate-rssi-gate-start").innerText())
       .toMatch(/dBm/);
+    await expect
+      .poll(async () =>
+        page.getByTestId("gate-rssi-min-gate-start").innerText(),
+      )
+      .toMatch(/dBm/);
+    await expect
+      .poll(async () =>
+        page.getByTestId("gate-disconnects-gate-start").innerText(),
+      )
+      .toMatch(/^\d+$/);
     await expect
       .poll(async () => page.getByTestId("gate-temp-gate-start").innerText())
       .toMatch(/°/);

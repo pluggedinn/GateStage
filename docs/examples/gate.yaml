@@ -2,8 +2,11 @@
 #
 # Flash one copy per gate. Pass `gate_id` at flash time (default "1" below):
 #   esphome -s gate_id 3 run gate.yaml
-#   ./flash-gate.sh 3
-# That sets esphome.name to gate-<id> — the gate ID in UDP beacons GateStage listens for.
+#   ./flash-gate.sh 3 --device 10.3.141.118 --no-logs
+# `esphome.name` stays `gate` so ESP-IDF is not wiped between IDs. The UDP
+# beacon id is still `gate-<id>` (what GateStage discovers). mDNS is unique
+# via name_add_mac_suffix. First compile is a full ESP-IDF build; later
+# gate_ids only rebuild main.cpp. Do not compile two IDs at the same time.
 #
 # Hardware (default in this file):
 #   - Seeed XIAO ESP32-C5
@@ -21,8 +24,9 @@ substitutions:
   gate_id: "1"
 
 esphome:
-  name: gate-${gate_id}
+  name: gate
   friendly_name: Gate ${gate_id}
+  name_add_mac_suffix: true
   on_boot:
     # Match runtime LED limit to the flashed strip buffer size.
     - priority: -200
@@ -33,14 +37,14 @@ esphome:
               auto *out = id(gate_led).get_output();
               if (out == nullptr) return 0;
               return static_cast<esphome::light::AddressableLight *>(out)->size();
-    # Restore runs in light setup(); re-apply after hardware is up (RMT strip).
+    # RMT strip is up after setup(); idle is always Rainbow at 60%.
     - priority: -100
       then:
         - delay: 300ms
         - light.turn_on:
             id: gate_led
-            transition_length: 0s
-        - script.execute: mask_inactive_leds
+            brightness: 60%
+            effect: Rainbow
 
 esp32:
   board: esp32-c5-devkitc-1
@@ -64,11 +68,8 @@ wifi:
       password: "tinywhoop"
       priority: 10
   band_mode: 5GHZ
-  fast_connect: false
+  fast_connect: true
   power_save_mode: none
-  ap:
-    ssid: GateStage-gate-${gate_id}
-    password: "tinywhoop"
   on_connect:
     then:
       - delay: 500ms
@@ -77,6 +78,9 @@ wifi:
           then:
             - script.execute: send_gatestage_beacon
             - delay: 200ms
+  on_disconnect:
+    then:
+      - lambda: "id(g_wifi_disconnects) += 1;"
 
 api:
 
@@ -108,6 +112,14 @@ udp:
 # Runtime strip + effect parameters (GateStage sets these via REST)
 globals:
   - id: g_max_leds
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: g_wifi_disconnects
+    type: int
+    restore_value: false
+    initial_value: "0"
+  - id: g_rssi_min
     type: int
     restore_value: false
     initial_value: "0"
@@ -148,7 +160,7 @@ globals:
     restore_value: false
     initial_value: "200"
   - id: g_strobe_origin_ms
-    type: uint32
+    type: int
     restore_value: false
     initial_value: "0"
   - id: g_wipe_interval_ms
@@ -385,25 +397,36 @@ script:
       - udp.write:
           id: gatestage_beacon
           data: !lambda |-
-            char buf[160];
-            const char *name = App.get_name().c_str();
+            char buf[192];
+            const char *name = "gate-${gate_id}";
+            const unsigned long up = millis() / 1000UL;
+            const int dc = id(g_wifi_disconnects);
             const bool have_rssi = !std::isnan(id(wifi_rssi).state);
             const bool have_temp = !std::isnan(id(esp_temp).state);
+            if (have_rssi) {
+              const int rssi = static_cast<int>(id(wifi_rssi).state);
+              if (id(g_rssi_min) == 0 || rssi < id(g_rssi_min)) {
+                id(g_rssi_min) = rssi;
+              }
+            }
+            const int rssi_min = id(g_rssi_min);
             int n = 0;
             if (have_rssi && have_temp) {
               n = snprintf(buf, sizeof(buf),
-                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f,\"tC\":%.1f}",
-                name, id(wifi_rssi).state, id(esp_temp).state);
+                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f,\"tC\":%.1f,\"up\":%lu,\"dc\":%d,\"rssiMin\":%d}",
+                name, id(wifi_rssi).state, id(esp_temp).state, up, dc, rssi_min);
             } else if (have_rssi) {
               n = snprintf(buf, sizeof(buf),
-                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f}",
-                name, id(wifi_rssi).state);
+                "{\"v\":1,\"id\":\"%s\",\"rssi\":%.0f,\"up\":%lu,\"dc\":%d,\"rssiMin\":%d}",
+                name, id(wifi_rssi).state, up, dc, rssi_min);
             } else if (have_temp) {
               n = snprintf(buf, sizeof(buf),
-                "{\"v\":1,\"id\":\"%s\",\"tC\":%.1f}",
-                name, id(esp_temp).state);
+                "{\"v\":1,\"id\":\"%s\",\"tC\":%.1f,\"up\":%lu,\"dc\":%d,\"rssiMin\":%d}",
+                name, id(esp_temp).state, up, dc, rssi_min);
             } else {
-              n = snprintf(buf, sizeof(buf), "{\"v\":1,\"id\":\"%s\"}", name);
+              n = snprintf(buf, sizeof(buf),
+                "{\"v\":1,\"id\":\"%s\",\"up\":%lu,\"dc\":%d,\"rssiMin\":%d}",
+                name, up, dc, rssi_min);
             }
             if (n < 0) return {};
             const size_t len = static_cast<size_t>(n) < sizeof(buf)
@@ -462,7 +485,7 @@ light:
     use_psram: false
     rmt_symbols: 96
     default_transition_length: 0s
-    restore_mode: RESTORE_AND_ON
+    restore_mode: ALWAYS_ON
     on_turn_off:
       - lambda: |-
           auto *out = static_cast<esphome::light::AddressableLight *>(id(gate_led).get_output());
@@ -471,11 +494,7 @@ light:
           out->schedule_show();
     initial_state:
       state: true
-      brightness: 5%
-      color_mode: rgb
-      red: 100%
-      green: 0%
-      blue: 0%
+      brightness: 60%
     effects:
       - addressable_lambda:
           name: Pulse

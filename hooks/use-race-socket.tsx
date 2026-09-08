@@ -8,10 +8,11 @@ import {
   useState,
 } from "react";
 import { io, type Socket } from "socket.io-client";
-import type {
-  GateHealth,
-  GateHealthEvent,
-  GateHealthSnapshot,
+import {
+  emptyGateHealth,
+  type GateHealth,
+  type GateHealthEvent,
+  type GateHealthSnapshot,
 } from "@/lib/gate-health";
 import {
   DEFAULT_INTEGRATION_ID,
@@ -67,14 +68,10 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
       setHealthById(snapshot);
     });
     socket.on("gate:health", (event: GateHealthEvent) => {
+      const { gateId, ...health } = event;
       setHealthById((prev) => ({
         ...prev,
-        [event.gateId]: {
-          online: event.online,
-          lastSeenAt: event.lastSeenAt,
-          rssi: event.rssi,
-          tempC: event.tempC,
-        },
+        [gateId]: { ...emptyGateHealth(), ...health },
       }));
     });
     socket.on("config:updated", () => {

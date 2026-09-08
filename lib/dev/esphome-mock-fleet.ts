@@ -21,13 +21,23 @@ export function esphomeMockFleetHosts(): { id: string; host: string }[] {
 }
 
 /** Stable fake telemetry so the Gates table is visually distinct in mocks. */
-export function mockGateTelemetry(id: string): { rssi: number; tC: number } {
+export function mockGateTelemetry(id: string): {
+  rssi: number;
+  tC: number;
+  up: number;
+  dc: number;
+  rssiMin: number;
+} {
   const index = Math.max(
     0,
     ESPHOME_MOCK_FLEET.findIndex((gate) => gate.id === id),
   );
+  const rssi = -48 - index * 6;
   return {
-    rssi: -48 - index * 6,
+    rssi,
     tC: 40 + index * 2.5,
+    up: 90 + index * 15,
+    dc: index,
+    rssiMin: rssi - 14,
   };
 }

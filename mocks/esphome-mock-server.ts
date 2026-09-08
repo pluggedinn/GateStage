@@ -6,6 +6,8 @@
  *   POST /light/:entity/turn_off
  *   POST /number/:entity/set?value=
  *   POST /switch/:entity/turn_on|turn_off
+ *   GET  /light/:entity  current light JSON
+ *   GET  /number/:entity current number JSON
  *   GET  /health
  *   GET  /state          command log (for tests)
  *   POST /reset          clear log
@@ -39,6 +41,18 @@ export function createEsphomeMockServer(options: {
     string,
     { on: boolean; params: Record<string, string> }
   >();
+  const numberState = new Map<string, number>();
+  const NUMBER_DEFAULTS: Record<string, number> = {
+    "FX Strobe Period": 400,
+    "FX Strobe On Time": 200,
+    "FX Strobe Start Delay": 0,
+  };
+  const DEFAULT_LIGHT = {
+    state: "ON",
+    brightness: 153,
+    effect: "Rainbow",
+    color: { r: 255, g: 255, b: 255 },
+  };
 
   function logCommand(
     entity: string,
@@ -52,8 +66,18 @@ export function createEsphomeMockServer(options: {
       at: new Date().toISOString(),
     };
     commandLog.push(entry);
-    if (action === "turn_on" || action === "turn_off") {
-      lightState.set(entity, { on: action === "turn_on", params });
+    if (action === "turn_on") {
+      const prev = lightState.get(entity);
+      lightState.set(entity, {
+        on: true,
+        params: { ...(prev?.params ?? {}), ...params },
+      });
+    } else if (action === "turn_off") {
+      const prev = lightState.get(entity);
+      lightState.set(entity, { on: false, params: prev?.params ?? {} });
+    } else if (action === "number_set") {
+      const value = Number(params.value);
+      if (Number.isFinite(value)) numberState.set(entity, value);
     }
     console.log(
       `${logPrefix} ${action} ${entity}`,
@@ -71,6 +95,9 @@ export function createEsphomeMockServer(options: {
       id: gateId,
       rssi: telemetry.rssi,
       tC: telemetry.tC,
+      up: telemetry.up,
+      dc: telemetry.dc,
+      rssiMin: telemetry.rssiMin,
       port,
     });
     beaconSock.send(payload, beaconPort, "127.0.0.1", () => {});
@@ -90,11 +117,42 @@ export function createEsphomeMockServer(options: {
 
     const lightGet = url.pathname.match(/^\/light\/([^/]+)$/);
     if (req.method === "GET" && lightGet) {
+      const entity = decodeURIComponent(lightGet[1]);
+      const stored = lightState.get(entity);
+      res.writeHead(200, { "Content-Type": "application/json" });
+      if (!stored) {
+        res.end(JSON.stringify({ id: entity, ...DEFAULT_LIGHT }));
+        return;
+      }
+      const color: Record<string, number> = {};
+      if (stored.params.r !== undefined) color.r = Number(stored.params.r);
+      if (stored.params.g !== undefined) color.g = Number(stored.params.g);
+      if (stored.params.b !== undefined) color.b = Number(stored.params.b);
+      res.end(
+        JSON.stringify({
+          id: entity,
+          state: stored.on ? "ON" : "OFF",
+          brightness:
+            stored.params.brightness !== undefined
+              ? Number(stored.params.brightness)
+              : DEFAULT_LIGHT.brightness,
+          effect: stored.params.effect ?? "None",
+          ...(Object.keys(color).length === 3 ? { color } : {}),
+        }),
+      );
+      return;
+    }
+
+    const numberGet = url.pathname.match(/^\/number\/([^/]+)$/);
+    if (req.method === "GET" && numberGet) {
+      const entity = decodeURIComponent(numberGet[1]);
+      const value = numberState.get(entity) ?? NUMBER_DEFAULTS[entity] ?? 0;
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(
         JSON.stringify({
-          id: decodeURIComponent(lightGet[1]),
-          state: "ON",
+          id: entity,
+          value,
+          state: String(value),
         }),
       );
       return;
@@ -114,6 +172,7 @@ export function createEsphomeMockServer(options: {
     if (req.method === "POST" && url.pathname === "/reset") {
       commandLog.length = 0;
       lightState.clear();
+      numberState.clear();
       res.writeHead(200, { "Content-Type": "application/json" });
       res.end(JSON.stringify({ ok: true }));
       return;

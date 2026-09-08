@@ -38,7 +38,8 @@ type GatesSortableTableProps = {
   onReorder: (orderedIds: string[]) => void;
   onToggleStartGate: (gate: GateView) => void;
   onToggleEnabled: (gate: GateView) => void;
-  onPingGate: (gateId: string) => void;
+  onTestGate: (gateId: string) => void;
+  testingGateIds: ReadonlySet<string>;
   onForgetGate: (gate: GateView) => void;
 };
 
@@ -48,7 +49,8 @@ type SortableGateRowProps = {
   now: number;
   onToggleStartGate: (gate: GateView) => void;
   onToggleEnabled: (gate: GateView) => void;
-  onPingGate: (gateId: string) => void;
+  onTestGate: (gateId: string) => void;
+  testing: boolean;
   onForgetGate: (gate: GateView) => void;
 };
 
@@ -72,7 +74,8 @@ function SortableGateRow({
   now,
   onToggleStartGate,
   onToggleEnabled,
-  onPingGate,
+  onTestGate,
+  testing,
   onForgetGate,
 }: SortableGateRowProps) {
   const {
@@ -147,6 +150,26 @@ function SortableGateRow({
         {gate.rssi === null ? "—" : `${Math.round(gate.rssi)} dBm`}
       </TableCell>
       <TableCell
+        className={cn(
+          "font-mono text-xs tabular-nums",
+          rssiClass(gate.rssiMin),
+        )}
+        data-testid={`gate-rssi-min-${gate.id}`}
+        title={
+          gate.lastOfflineAt
+            ? `Last dropout ${formatLastSeen(gate.lastOfflineAt, now)}`
+            : undefined
+        }
+      >
+        {gate.rssiMin === null ? "—" : `${Math.round(gate.rssiMin)} dBm`}
+      </TableCell>
+      <TableCell
+        className="font-mono text-xs tabular-nums"
+        data-testid={`gate-disconnects-${gate.id}`}
+      >
+        {gate.disconnects === null ? "—" : String(gate.disconnects)}
+      </TableCell>
+      <TableCell
         className={cn("font-mono text-xs tabular-nums", tempClass(gate.tempC))}
         data-testid={`gate-temp-${gate.id}`}
       >
@@ -166,8 +189,14 @@ function SortableGateRow({
       </TableCell>
       <TableCell className="space-x-2 text-right">
         {gate.isStartGate && <Badge variant="secondary">start</Badge>}
-        <Button size="sm" variant="outline" onClick={() => onPingGate(gate.id)}>
-          Ping
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={testing}
+          onClick={() => onTestGate(gate.id)}
+          data-testid={`gate-test-${gate.id}`}
+        >
+          {testing ? "Testing…" : "Test"}
         </Button>
         <Button size="sm" variant="outline" onClick={() => onForgetGate(gate)}>
           Forget
@@ -182,7 +211,8 @@ export function GatesSortableTable({
   onReorder,
   onToggleStartGate,
   onToggleEnabled,
-  onPingGate,
+  onTestGate,
+  testingGateIds,
   onForgetGate,
 }: GatesSortableTableProps) {
   const [now, setNow] = useState(() => Date.now());
@@ -227,6 +257,8 @@ export function GatesSortableTable({
               <TableHead>Status</TableHead>
               <TableHead>Last seen</TableHead>
               <TableHead>WiFi</TableHead>
+              <TableHead>Worst</TableHead>
+              <TableHead>Drops</TableHead>
               <TableHead>Temp</TableHead>
               <TableHead>Start</TableHead>
               <TableHead>Enabled</TableHead>
@@ -246,7 +278,8 @@ export function GatesSortableTable({
                   now={now}
                   onToggleStartGate={onToggleStartGate}
                   onToggleEnabled={onToggleEnabled}
-                  onPingGate={onPingGate}
+                  onTestGate={onTestGate}
+                  testing={testingGateIds.has(gate.id)}
                   onForgetGate={onForgetGate}
                 />
               ))}
