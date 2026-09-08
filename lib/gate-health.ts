@@ -17,6 +17,10 @@ export type GateHealth = {
   lastSeenAt: string | null;
   rssi: number | null;
   tempC: number | null;
+  uptimeSec: number | null;
+  disconnects: number | null;
+  rssiMin: number | null;
+  lastOfflineAt: string | null;
 };
 
 export type GateHealthEvent = {
@@ -35,6 +39,9 @@ export type BeaconPacket = {
   rssi: number | null;
   tempC: number | null;
   port: number;
+  uptimeSec: number | null;
+  disconnects: number | null;
+  rssiMin: number | null;
 };
 
 export type ParsedUdpPacket = WhoPacket | BeaconPacket;
@@ -44,6 +51,10 @@ const emptyHealth = (): GateHealth => ({
   lastSeenAt: null,
   rssi: null,
   tempC: null,
+  uptimeSec: null,
+  disconnects: null,
+  rssiMin: null,
+  lastOfflineAt: null,
 });
 
 export function emptyGateHealth(): GateHealth {
@@ -57,6 +68,36 @@ function asFiniteNumber(value: unknown): number | null {
     if (Number.isFinite(n)) return n;
   }
   return null;
+}
+
+export const RSSI_HISTORY_MAX = 20;
+
+/** RSSI is negative; 0 or positive in a beacon means "no sample". */
+function asRssi(value: unknown): number | null {
+  const n = asFiniteNumber(value);
+  if (n === null || n >= 0) return null;
+  return n;
+}
+
+export function appendRssiHistory(
+  history: number[],
+  rssi: number,
+  max = RSSI_HISTORY_MAX,
+): number[] {
+  const next = history.length >= max ? history.slice(1) : history.slice();
+  next.push(rssi);
+  return next;
+}
+
+export function minRssi(
+  values: Array<number | null | undefined>,
+): number | null {
+  let min: number | null = null;
+  for (const value of values) {
+    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    if (min === null || value < min) min = value;
+  }
+  return min;
 }
 
 export function parseUdpPacket(raw: string): ParsedUdpPacket | null {
@@ -75,12 +116,15 @@ export function parseUdpPacket(raw: string): ParsedUdpPacket | null {
     return {
       kind: "beacon",
       id: obj.id.trim(),
-      rssi: asFiniteNumber(obj.rssi),
+      rssi: asRssi(obj.rssi),
       tempC: asFiniteNumber(obj.tC),
       port:
         port !== null && port > 0 && port < 65536
           ? Math.floor(port)
           : DEFAULT_GATE_HTTP_PORT,
+      uptimeSec: asFiniteNumber(obj.up),
+      disconnects: asFiniteNumber(obj.dc),
+      rssiMin: asRssi(obj.rssiMin),
     };
   } catch {
     return null;

@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { sendEsphomeCommand } from "./esphome";
+import { parseLightStateJson, sendEsphomeCommand, testGate } from "./esphome";
 
 const originalFetch = globalThis.fetch;
 const ENV_KEYS = [
   "GATESTAGE_GATE_COMMAND_TIMEOUT_MS",
   "GATESTAGE_GATE_COMMAND_RETRIES",
   "GATESTAGE_GATE_COMMAND_RETRY_DELAY_MS",
+  "GATESTAGE_GATE_TEST_DURATION_MS",
 ] as const;
 
 const savedEnv: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> =
@@ -48,6 +49,7 @@ beforeEach(() => {
   process.env.GATESTAGE_GATE_COMMAND_TIMEOUT_MS = "800";
   process.env.GATESTAGE_GATE_COMMAND_RETRIES = "2";
   process.env.GATESTAGE_GATE_COMMAND_RETRY_DELAY_MS = "0";
+  process.env.GATESTAGE_GATE_TEST_DURATION_MS = "0";
 });
 
 afterEach(() => {
@@ -181,5 +183,146 @@ describe("sendEsphomeCommand retries", () => {
     assert.ok(startDelayIndex > periodIndex);
     assert.ok(startDelayIndex > onIndex);
     assert.equal(startDelayCalls, 1);
+  });
+});
+
+describe("parseLightStateJson", () => {
+  test("reads on, effect, brightness, and nested RGB", () => {
+    const snapshot = parseLightStateJson({
+      state: "ON",
+      brightness: 153,
+      effect: "Rainbow",
+      color: { r: 255, g: 0, b: 128 },
+    });
+    assert.equal(snapshot.on, true);
+    assert.equal(snapshot.effectName, "Rainbow");
+    assert.equal(snapshot.brightness, 153);
+    assert.equal(snapshot.r, 255);
+    assert.equal(snapshot.g, 0);
+    assert.equal(snapshot.b, 128);
+  });
+
+  test("treats missing effect as None and scales 0-1 channels", () => {
+    const snapshot = parseLightStateJson({
+      state: "ON",
+      brightness: 0.6,
+      r: 1,
+      g: 0,
+      b: 0.5,
+    });
+    assert.equal(snapshot.effectName, "None");
+    assert.equal(snapshot.brightness, 153);
+    assert.equal(snapshot.r, 255);
+    assert.equal(snapshot.g, 0);
+    assert.equal(snapshot.b, 128);
+  });
+
+  test("treats OFF as off", () => {
+    const snapshot = parseLightStateJson({ state: "OFF", effect: "Strobe" });
+    assert.equal(snapshot.on, false);
+    assert.equal(snapshot.effectName, "Strobe");
+  });
+});
+
+describe("testGate", () => {
+  function jsonResponse(body: unknown) {
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  test("strobes then restores the previous effect", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("/light/") && !url.includes("turn_")) {
+        return jsonResponse({
+          state: "ON",
+          brightness: 153,
+          effect: "Rainbow",
+          color: { r: 255, g: 255, b: 255 },
+        });
+      }
+      if (url.includes("/number/") && !url.includes("/set")) {
+        if (url.includes("Period")) return jsonResponse({ value: 400 });
+        if (url.includes("On%20Time")) return jsonResponse({ value: 200 });
+        return jsonResponse({ value: 0 });
+      }
+      return okResponse();
+    }) as typeof fetch;
+
+    const result = await testGate("10.0.0.2:80");
+    assert.equal(result.ok, true);
+
+    const strobeOn = urls.find(
+      (url) => url.includes("/light/") && url.includes("effect=Strobe"),
+    );
+    assert.ok(strobeOn);
+    const restoreOn = urls.filter(
+      (url) => url.includes("/light/") && url.includes("turn_on"),
+    );
+    const lastTurnOn = restoreOn.at(-1);
+    assert.ok(lastTurnOn);
+    assert.match(lastTurnOn, /effect=Rainbow/);
+    assert.match(lastTurnOn, /brightness=153/);
+
+    const periodSets = urls.filter((url) =>
+      url.includes("FX%20Strobe%20Period"),
+    );
+    assert.ok(periodSets.some((url) => url.includes("value=80")));
+    assert.ok(periodSets.some((url) => url.includes("value=400")));
+  });
+
+  test("restores a gate that was off", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("/light/") && !url.includes("turn_")) {
+        return jsonResponse({ state: "OFF", effect: "None" });
+      }
+      if (url.includes("/number/") && !url.includes("/set")) {
+        return jsonResponse({ value: 400 });
+      }
+      return okResponse();
+    }) as typeof fetch;
+
+    await testGate("10.0.0.3:80");
+    const lastLight = urls.findLast((url) => url.includes("/light/"));
+    assert.ok(lastLight);
+    assert.match(lastLight, /turn_off/);
+  });
+
+  test("restores a solid color", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      urls.push(url);
+      if (url.includes("/light/") && !url.includes("turn_")) {
+        return jsonResponse({
+          state: "ON",
+          effect: "None",
+          brightness: 100,
+          color: { r: 255, g: 0, b: 0 },
+        });
+      }
+      if (url.includes("/number/") && !url.includes("/set")) {
+        return jsonResponse({ value: 200 });
+      }
+      return okResponse();
+    }) as typeof fetch;
+
+    await testGate("10.0.0.4:80");
+    const lastTurnOn = urls.findLast(
+      (url) => url.includes("/light/") && url.includes("turn_on"),
+    );
+    assert.ok(lastTurnOn);
+    assert.match(lastTurnOn, /effect=None/);
+    assert.match(lastTurnOn, /r=255/);
+    assert.match(lastTurnOn, /g=0/);
+    assert.match(lastTurnOn, /b=0/);
+    assert.match(lastTurnOn, /brightness=100/);
   });
 });

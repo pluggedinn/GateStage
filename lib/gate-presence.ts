@@ -8,6 +8,7 @@ import {
 } from "@/lib/config/store";
 import { pingGate } from "@/lib/esphome";
 import {
+  appendRssiHistory,
   emptyGateHealth,
   GATE_OFFLINE_AFTER_MS,
   GATESTAGE_BEACON_PORT,
@@ -15,6 +16,7 @@ import {
   type GateHealthEvent,
   type GateHealthSnapshot,
   hostFromSighting,
+  minRssi,
   parseUdpPacket,
   whoPacketJson,
 } from "@/lib/gate-health";
@@ -24,6 +26,7 @@ const GLOBAL_PRESENCE_KEY = "__gatestage_gate_presence__";
 
 type PresenceState = {
   healthById: Map<string, GateHealth>;
+  rssiHistoryById: Map<string, number[]>;
   rttById: Map<string, number>;
   socket: dgram.Socket | null;
   pingTimer: NodeJS.Timeout | null;
@@ -38,6 +41,7 @@ function presenceState(): PresenceState {
   if (!globalStore[GLOBAL_PRESENCE_KEY]) {
     globalStore[GLOBAL_PRESENCE_KEY] = {
       healthById: new Map(),
+      rssiHistoryById: new Map(),
       rttById: new Map(),
       socket: null,
       pingTimer: null,
@@ -47,6 +51,9 @@ function presenceState(): PresenceState {
   }
   if (!globalStore[GLOBAL_PRESENCE_KEY].rttById) {
     globalStore[GLOBAL_PRESENCE_KEY].rttById = new Map();
+  }
+  if (!globalStore[GLOBAL_PRESENCE_KEY].rssiHistoryById) {
+    globalStore[GLOBAL_PRESENCE_KEY].rssiHistoryById = new Map();
   }
   return globalStore[GLOBAL_PRESENCE_KEY];
 }
@@ -88,13 +95,37 @@ export function getHealthSnapshot(): GateHealthSnapshot {
 }
 
 export function clearHealth(gateId: string) {
-  presenceState().healthById.delete(gateId);
+  const state = presenceState();
+  state.healthById.delete(gateId);
+  state.rssiHistoryById.delete(gateId);
+  state.rttById.delete(gateId);
+}
+
+function markOffline(gateId: string) {
+  const previous = getHealth(gateId);
+  const lastOfflineAt =
+    previous.online || !previous.lastOfflineAt
+      ? new Date().toISOString()
+      : previous.lastOfflineAt;
+  presenceState().healthById.set(gateId, {
+    ...previous,
+    online: false,
+    lastOfflineAt,
+  });
+  emitHealth(gateId);
 }
 
 function markSeen(
   gateId: string,
-  telemetry: { rssi?: number | null; tempC?: number | null } = {},
+  telemetry: {
+    rssi?: number | null;
+    tempC?: number | null;
+    uptimeSec?: number | null;
+    disconnects?: number | null;
+    rssiMin?: number | null;
+  } = {},
 ) {
+  const state = presenceState();
   const previous = getHealth(gateId);
   const rssi =
     telemetry.rssi === undefined || telemetry.rssi === null
@@ -104,11 +135,26 @@ function markSeen(
     telemetry.tempC === undefined || telemetry.tempC === null
       ? previous.tempC
       : telemetry.tempC;
-  presenceState().healthById.set(gateId, {
+  let history = state.rssiHistoryById.get(gateId) ?? [];
+  if (typeof telemetry.rssi === "number") {
+    history = appendRssiHistory(history, telemetry.rssi);
+    state.rssiHistoryById.set(gateId, history);
+  }
+  state.healthById.set(gateId, {
     online: true,
     lastSeenAt: new Date().toISOString(),
     rssi,
     tempC,
+    uptimeSec:
+      telemetry.uptimeSec === undefined || telemetry.uptimeSec === null
+        ? previous.uptimeSec
+        : telemetry.uptimeSec,
+    disconnects:
+      telemetry.disconnects === undefined || telemetry.disconnects === null
+        ? previous.disconnects
+        : telemetry.disconnects,
+    rssiMin: minRssi([telemetry.rssiMin, previous.rssiMin, ...history]),
+    lastOfflineAt: previous.lastOfflineAt,
   });
   emitHealth(gateId);
 }
@@ -127,8 +173,7 @@ export function recordPingResult(
   }
   const previous = getHealth(gateId);
   if (!previous.lastSeenAt) {
-    presenceState().healthById.set(gateId, { ...previous, online: false });
-    emitHealth(gateId);
+    markOffline(gateId);
   }
 }
 
@@ -147,13 +192,11 @@ function sweepOffline() {
     const health = getHealth(id);
     if (!health.online) continue;
     if (!health.lastSeenAt) {
-      state.healthById.set(id, { ...health, online: false });
-      emitHealth(id);
+      markOffline(id);
       continue;
     }
     if (Date.parse(health.lastSeenAt) < cutoff) {
-      state.healthById.set(id, { ...health, online: false });
-      emitHealth(id);
+      markOffline(id);
     }
   }
 }
@@ -175,10 +218,13 @@ async function handleBeacon(
   port: number,
   rssi: number | null,
   tempC: number | null,
+  uptimeSec: number | null,
+  disconnects: number | null,
+  rssiMin: number | null,
 ) {
   const host = hostFromSighting(address, port);
   await applySighting({ id, host, source: "udp" });
-  markSeen(id, { rssi, tempC });
+  markSeen(id, { rssi, tempC, uptimeSec, disconnects, rssiMin });
 }
 
 function bindUdp() {
@@ -201,6 +247,9 @@ function bindUdp() {
       parsed.port,
       parsed.rssi,
       parsed.tempC,
+      parsed.uptimeSec,
+      parsed.disconnects,
+      parsed.rssiMin,
     );
   });
 
@@ -308,6 +357,8 @@ export function stopPresence() {
 
 /** Test helper. */
 export function resetPresenceMemory() {
-  presenceState().healthById.clear();
-  presenceState().rttById.clear();
+  const state = presenceState();
+  state.healthById.clear();
+  state.rssiHistoryById.clear();
+  state.rttById.clear();
 }

@@ -45,6 +45,10 @@ function asGateView(raw: unknown): GateView | null {
     lastSeenAt: g.lastSeenAt ?? null,
     rssi: typeof g.rssi === "number" ? g.rssi : null,
     tempC: typeof g.tempC === "number" ? g.tempC : null,
+    uptimeSec: typeof g.uptimeSec === "number" ? g.uptimeSec : null,
+    disconnects: typeof g.disconnects === "number" ? g.disconnects : null,
+    rssiMin: typeof g.rssiMin === "number" ? g.rssiMin : null,
+    lastOfflineAt: g.lastOfflineAt ?? null,
   };
 }
 
@@ -53,6 +57,9 @@ export default function GatesPage() {
   const [gates, setGates] = useState<GateView[]>([]);
   const [scanning, setScanning] = useState(false);
   const [forgetGate, setForgetGate] = useState<GateView | null>(null);
+  const [testingGateIds, setTestingGateIds] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const loadGates = useCallback(async () => {
     const res = await fetch("/api/gates");
@@ -134,17 +141,35 @@ export default function GatesPage() {
     await loadGates();
   }
 
-  async function pingGate(gateId: string) {
-    const res = await fetch(`/api/gates/${gateId}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "ping" }),
-    });
-    const data = (await res.json()) as { online?: boolean };
-    if (data.online) {
-      toast.success("Gate online", { description: gateId });
-    } else {
-      toast.error("Gate offline", { description: gateId });
+  async function testGate(gateId: string) {
+    setTestingGateIds((prev) => new Set(prev).add(gateId));
+    const toastId = toast.loading("Blinking gate…", { description: gateId });
+    try {
+      const res = await fetch(`/api/gates/${gateId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "test" }),
+      });
+      if (!res.ok) {
+        const data = (await res.json()) as { error?: string };
+        toast.error("Test failed", {
+          id: toastId,
+          description: data.error ?? gateId,
+        });
+        return;
+      }
+      toast.success("Test complete", {
+        id: toastId,
+        description: "Restored previous LED state.",
+      });
+    } catch {
+      toast.error("Test failed", { id: toastId, description: gateId });
+    } finally {
+      setTestingGateIds((prev) => {
+        const next = new Set(prev);
+        next.delete(gateId);
+        return next;
+      });
     }
   }
 
@@ -230,7 +255,8 @@ export default function GatesPage() {
               onReorder={(orderedIds) => void reorderGates(orderedIds)}
               onToggleStartGate={toggleStartGate}
               onToggleEnabled={toggleEnabled}
-              onPingGate={pingGate}
+              onTestGate={testGate}
+              testingGateIds={testingGateIds}
               onForgetGate={setForgetGate}
             />
           )}
