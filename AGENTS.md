@@ -91,6 +91,8 @@ Providers are defined in `lib/integrations.ts`. `raceManagerProvider` in setting
 
 Changing provider or URL reconnects the listener automatically (Settings save).
 
+**Auto-detect:** Settings → **Detect** runs a server-side LAN probe (`POST /api/settings/detect`) — well-known ports + fingerprint (Next raw WebSocket `:5702`; RotorHazard HTTP/Socket.io `:5000` and `rotorhazard.local`). Fills the URL field only; Save still required. Not UDP beacons (those are for gates).
+
 ---
 
 ## Race events
@@ -128,6 +130,7 @@ Next has no heat-loaded / roster event. `heat.loaded` is still used by RotorHaza
 | Gate commands | `lib/esphome.ts`, `lib/effects.ts` |
 | Config / schema | `lib/config/schema.ts`, `lib/config/store.ts` |
 | Gate discovery / health | `lib/gate-discovery.ts`, `lib/gate-presence.ts`, `lib/gate-health.ts` |
+| Race manager auto-detect | `lib/race-manager-detect.ts`, `app/api/settings/detect/` |
 | API endpoint | `app/api/` |
 | Live dashboard | `lib/broadcaster.ts`, `hooks/use-race-socket.tsx` |
 | Routines UI | `app/routines/` |
