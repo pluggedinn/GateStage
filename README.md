@@ -37,7 +37,7 @@ This is the glue between your race manager and your LED gates.
 | FPV Trackside | ✗ | Work in progress |
 | RotorHazard | ✓ | Available (Socket.io; pilot names pending) |
 
-Select your provider in **Settings**. Only Next connects today; other integrations are placeholders while protocol work is underway.
+Select your provider in **Settings**. Use **Detect** to probe the race LAN for Next (`:5702`) or RotorHazard (`:5000` / `rotorhazard.local`), then **Save** to connect. Trackside is still a placeholder.
 
 ## Features
 
@@ -113,6 +113,7 @@ Full hardware and networking context lives in [AGENTS.md](./AGENTS.md#architectu
 
 Settings are stored in `data/config.json` (gitignored).
 Gates are remembered in that file. New flashed gates appear from UDP beacons; Scan Now broadcasts WHO and pings last-known hosts.
+Race-manager **Detect** (Settings) is a separate LAN port probe + fingerprint — not the gate UDP beacon.
 
 Operational logs append to `data/gatestage.log` (same directory as config; desktop app: OS user data dir). Restarts keep writing to the same file. Override with `GATESTAGE_LOG_PATH`. Open **Logs** in the UI to tail the file, or read it on disk after a race day. At ~10 MB the file rotates once to `gatestage.log.1`.
 
