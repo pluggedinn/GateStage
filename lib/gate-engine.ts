@@ -20,26 +20,54 @@ import { logger } from "@/lib/logger";
 import type { RaceEventType } from "@/lib/race-events";
 import { describeDelayStep } from "@/lib/sequence-display";
 import { createTestRaceEvent } from "@/lib/test-race-event";
-import type {
-  MappingAction,
-  RaceActionEnvelope,
-  RaceEvent,
-  SequenceActionStep,
-  SequenceStep,
+import {
+  type GateLedSnapshot,
+  type MappingAction,
+  NO_ROUTINE_COMMAND,
+  NOTHING_SENT_COMMAND,
+  type RaceActionEnvelope,
+  type RaceEvent,
+  ROUTINE_LOG_GATE_ID,
+  type SequenceActionStep,
+  type SequenceStep,
 } from "@/lib/types";
 
 const crossingDebounceMs = 400;
-const ROUTINE_LOG_GATE = "routine";
 const lastCrossingByPilot = new Map<string, number>();
 
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+function ledFromCommand(command: EsphomeCommand): GateLedSnapshot {
+  if (command.kind === "off") return { mode: "off" };
+  const brightnessPercent =
+    command.brightnessPercent ?? getDefaultBrightnessPercent();
+  if (command.kind === "effect") {
+    return {
+      mode: "effect",
+      effectId: command.effectId,
+      brightnessPercent,
+      ...(command.r !== undefined &&
+      command.g !== undefined &&
+      command.b !== undefined
+        ? { r: command.r, g: command.g, b: command.b }
+        : {}),
+    };
+  }
+  return {
+    mode: "solid",
+    r: command.r,
+    g: command.g,
+    b: command.b,
+    brightnessPercent,
+  };
+}
+
 export class GateEngine {
   constructor(private broadcaster: Broadcaster) {}
 
-  async dispatch(event: RaceEvent) {
+  async dispatch(event: RaceEvent, eventAt?: string) {
     ingestRaceEvent(event);
 
     if (event.type === "pilot.crossing") {
@@ -61,6 +89,7 @@ export class GateEngine {
         "gate-engine",
         `no routine for ${event.type} enabled=${sequence?.enabled ?? false} steps=${sequence?.steps.length ?? 0}`,
       );
+      this.emitRoutineNotice(NO_ROUTINE_COMMAND, eventAt);
       return;
     }
 
@@ -68,7 +97,7 @@ export class GateEngine {
       "gate-engine",
       `running routine ${event.type} steps=${sequence.steps.length}`,
     );
-    await this.executeSequence(sequence.steps, event);
+    await this.executeSequence(sequence.steps, event, eventAt);
   }
 
   /**
@@ -77,6 +106,7 @@ export class GateEngine {
    */
   async runRoutine(
     eventType: RaceEventType,
+    eventAt?: string,
   ): Promise<{ ok: true } | { ok: false; error: string }> {
     const sequence = getSequence(eventType);
     if (!sequence) {
@@ -102,8 +132,13 @@ export class GateEngine {
       "gate-engine",
       `manual run routine ${eventType} steps=${sequence.steps.length}`,
     );
-    await this.executeSequence(sequence.steps, event);
+    await this.executeSequence(sequence.steps, event, eventAt);
     return { ok: true };
+  }
+
+  /** Manual page command. Recorded on the dashboard with no race event. */
+  async sendManualCommand(gate: Gate, command: EsphomeCommand) {
+    return this.sendCommandToGate(gate, command, this.describeCommand(command));
   }
 
   /**
@@ -157,11 +192,30 @@ export class GateEngine {
     return { ok: failed === 0, sent, failed };
   }
 
-  private async executeSequence(steps: SequenceStep[], event: RaceEvent) {
+  private emitRoutineNotice(command: string, eventAt?: string) {
+    this.broadcaster.emitRaceAction({
+      gateId: ROUTINE_LOG_GATE_ID,
+      command,
+      success: false,
+      at: new Date().toISOString(),
+      eventAt,
+    });
+  }
+
+  private async executeSequence(
+    steps: SequenceStep[],
+    event: RaceEvent,
+    eventAt?: string,
+  ) {
     const enabledGates = getGates().filter((g) => g.enabled);
+    let gateCommands = 0;
 
     for (const step of steps) {
-      await this.runStep(step, event, enabledGates);
+      gateCommands += await this.runStep(step, event, enabledGates, eventAt);
+    }
+
+    if (gateCommands === 0) {
+      this.emitRoutineNotice(NOTHING_SENT_COMMAND, eventAt);
     }
   }
 
@@ -169,30 +223,35 @@ export class GateEngine {
     step: SequenceStep,
     event: RaceEvent,
     enabledGates: Gate[],
-  ) {
+    eventAt?: string,
+  ): Promise<number> {
     if (step.kind === "delay") {
       const label = describeDelayStep(step.ms);
       logger.info("gate-engine", `delay ${step.ms}ms (${label})`);
       this.broadcaster.emitRaceAction({
-        gateId: ROUTINE_LOG_GATE,
+        gateId: ROUTINE_LOG_GATE_ID,
         command: label,
         success: true,
         at: new Date().toISOString(),
+        eventAt,
       });
       await sleep(step.ms);
-      return;
+      return 0;
     }
 
     if (step.action.kind === "choreography") {
+      let sent = 0;
       await runChoreography(step.action, {
         gates: enabledGates,
         event,
         sleep,
         rttMsForGate: (gateId) => getLatestRttMs(gateId),
-        sendToGate: async (gate, command, commandLabel) =>
-          this.sendCommandToGate(gate, command, commandLabel),
+        sendToGate: async (gate, command, commandLabel) => {
+          sent += 1;
+          return this.sendCommandToGate(gate, command, commandLabel, eventAt);
+        },
       });
-      return;
+      return sent;
     }
 
     const targets = this.resolveTargets(
@@ -201,21 +260,24 @@ export class GateEngine {
       enabledGates,
     );
     const command = this.actionToCommand(step.action, event);
-    if (!command) return;
+    if (!command || targets.length === 0) return 0;
 
     await Promise.allSettled(
       targets.map(async (gate) => {
         const label = this.describeCommand(command);
-        await this.sendCommandToGate(gate, command, label);
+        await this.sendCommandToGate(gate, command, label, eventAt);
       }),
     );
+    return targets.length;
   }
 
   private async sendCommandToGate(
     gate: Gate,
     command: EsphomeCommand,
     label: string,
+    eventAt?: string,
   ) {
+    const led = ledFromCommand(command);
     try {
       const res = await sendEsphomeCommand(gate.host, command);
       const envelope: RaceActionEnvelope = {
@@ -224,6 +286,8 @@ export class GateEngine {
         success: res.ok,
         error: res.ok ? undefined : `HTTP ${res.status}`,
         at: new Date().toISOString(),
+        eventAt,
+        led,
       };
       this.broadcaster.emitRaceAction(envelope);
       if (res.ok) {
@@ -247,6 +311,8 @@ export class GateEngine {
         success: false,
         error: err instanceof Error ? err.message : "Unknown error",
         at: new Date().toISOString(),
+        eventAt,
+        led,
       };
       this.broadcaster.emitRaceAction(envelope);
       logger.error(

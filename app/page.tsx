@@ -1,256 +1,187 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { StatusStrip } from "@/components/dashboard/status-strip";
 import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { useRaceSocket } from "@/hooks/use-race-socket";
-import { parseRgbFromCommand, rgbToHex } from "@/lib/color";
-import {
-  eventStatusBorderClass,
-  eventStatusTextClass,
-} from "@/lib/event-status";
+import { rgbToHex } from "@/lib/color";
 import type { Gate } from "@/lib/config/schema";
-import type { RaceActionEnvelope, RaceEventEnvelope } from "@/lib/types";
+import {
+  type DashboardIssue,
+  dashboardIssues,
+  eventIssueLabel,
+  eventsNewestFirst,
+  type GateAttention,
+  timelineDetail,
+  timelinePilotColor,
+  timelineTitle,
+} from "@/lib/dashboard-glance";
+import { eventStatusTextClass } from "@/lib/event-status";
+import { NO_ROUTINE_COMMAND, NOTHING_SENT_COMMAND } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function formatEventTime(at: string) {
   return new Date(at).toLocaleTimeString();
 }
 
-function EventHero({ event }: { event: RaceEventEnvelope }) {
-  return (
-    <div
-      className={cn(
-        "mb-4 rounded-lg border border-border border-l-4 bg-muted/40 p-4",
-        eventStatusBorderClass(event.type),
-      )}
-    >
-      <p className="text-sm text-muted-foreground">Latest event</p>
-      <p
-        data-testid="latest-event-type"
-        className={cn(
-          "mt-1 font-mono text-xl font-medium",
-          eventStatusTextClass(event.type),
-        )}
-      >
-        {event.type}
-      </p>
-      <p className="mt-1 font-mono text-sm tabular-nums text-muted-foreground">
-        {formatEventTime(event.at)}
-      </p>
-    </div>
-  );
+function isGate(value: unknown): value is Gate {
+  if (!value || typeof value !== "object") return false;
+  const gate = value as Partial<Gate>;
+  return typeof gate.id === "string" && typeof gate.host === "string";
 }
 
-function EventRow({
-  event,
-  dense,
-}: {
-  event: RaceEventEnvelope;
-  dense?: boolean;
-}) {
-  return (
-    <li
-      className={cn(
-        "rounded-md border border-border bg-muted/30",
-        dense ? "p-2 text-sm" : "p-3 text-base",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <span className={cn("font-mono", eventStatusTextClass(event.type))}>
-          {event.type}
-        </span>
-        <span className="font-mono text-sm tabular-nums text-muted-foreground">
-          {formatEventTime(event.at)}
-        </span>
-      </div>
-    </li>
-  );
-}
-
-function ActionSwatch({ command }: { command: string }) {
-  const rgb = parseRgbFromCommand(command);
-  if (!rgb) return null;
-  return (
-    <span
-      className="size-4 shrink-0 rounded border border-border"
-      style={{ backgroundColor: rgbToHex(rgb) }}
-      aria-hidden
-    />
-  );
-}
-
-function ActionHero({ action }: { action: RaceActionEnvelope }) {
-  return (
-    <div className="mb-4 rounded-lg border border-border border-l-4 border-l-border bg-muted/40 p-4">
-      <p className="text-sm text-muted-foreground">Latest command</p>
-      <div className="mt-2 flex items-center gap-3">
-        <ActionSwatch command={action.command} />
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-mono text-xl font-medium">
-            {action.gateId}
-          </p>
-          <p className="truncate font-mono text-sm text-muted-foreground">
-            {action.command}
-          </p>
-        </div>
-        <Badge variant={action.success ? "default" : "destructive"}>
-          {action.success ? "ok" : "fail"}
-        </Badge>
-      </div>
-      {action.error && (
-        <p className="mt-2 text-sm text-destructive">{action.error}</p>
-      )}
-    </div>
-  );
-}
-
-function ActionRow({
-  action,
-  dense,
-}: {
-  action: RaceActionEnvelope;
-  dense?: boolean;
-}) {
-  return (
-    <li
-      className={cn(
-        "rounded-md border border-border bg-muted/30",
-        dense ? "p-2 text-sm" : "p-3 text-base",
-      )}
-    >
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <ActionSwatch command={action.command} />
-          <span className="truncate font-mono">{action.gateId}</span>
-        </div>
-        <span className="hidden truncate font-mono text-muted-foreground sm:inline">
-          {action.command}
-        </span>
-        <Badge variant={action.success ? "default" : "destructive"}>
-          {action.success ? "ok" : "fail"}
-        </Badge>
-      </div>
-      {action.error && (
-        <p className="mt-1 text-sm text-destructive">{action.error}</p>
-      )}
-    </li>
-  );
+function issueClass(tone: DashboardIssue["tone"]) {
+  return tone === "error" ? "text-status-error" : "text-status-warn";
 }
 
 export default function DashboardPage() {
-  const { events, actions } = useRaceSocket();
-  const [enabledGateCount, setEnabledGateCount] = useState<number | null>(null);
+  const { events, actions, healthById, healthReady, configRevision } =
+    useRaceSocket();
+  const [gates, setGates] = useState<Gate[]>([]);
 
   useEffect(() => {
     let cancelled = false;
+    void configRevision;
     void (async () => {
       const res = await fetch("/api/gates");
       if (!res.ok || cancelled) return;
-      const gates = (await res.json()) as Gate[];
-      if (!cancelled) {
-        setEnabledGateCount(gates.filter((g) => g.enabled).length);
+      const data: unknown = await res.json();
+      if (!cancelled && Array.isArray(data)) {
+        setGates(data.filter(isGate));
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [configRevision]);
 
-  const [latestEvent, ...olderEvents] = events;
-  const [latestAction, ...olderActions] = actions;
+  const attention: GateAttention[] = healthReady
+    ? gates.map((gate) => {
+        const health = healthById[gate.id];
+        return {
+          id: gate.id,
+          enabled: gate.enabled !== false,
+          online: health?.online ?? false,
+          rssi: health?.rssi ?? null,
+          tempC: health?.tempC ?? null,
+        };
+      })
+    : [];
+
+  const issues = dashboardIssues(events, actions, attention);
+  const feed = eventsNewestFirst(events);
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
+        <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-base text-muted-foreground">
-          Live race events and gate actions
+          Race events, and anything that needs a look
         </p>
       </div>
 
-      <StatusStrip
-        enabledGateCount={enabledGateCount}
-        lastEvent={latestEvent}
-      />
+      <section aria-label="Issues" className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Issues</h2>
+        {issues.length === 0 ? (
+          <p className="text-base text-muted-foreground">No issues.</p>
+        ) : (
+          <ul data-testid="issues" className="space-y-2">
+            {issues.map((issue) => (
+              <li
+                key={issue.id}
+                className="flex items-baseline justify-between gap-3 rounded-md border border-border bg-card px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p
+                    className={cn(
+                      "truncate font-medium",
+                      issueClass(issue.tone),
+                    )}
+                  >
+                    {issue.title}
+                  </p>
+                  {issue.detail ? (
+                    <p className="truncate text-sm text-muted-foreground">
+                      {issue.detail}
+                    </p>
+                  ) : null}
+                </div>
+                {issue.at ? (
+                  <time className="shrink-0 font-mono text-sm tabular-nums text-muted-foreground">
+                    {formatEventTime(issue.at)}
+                  </time>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Race events</CardTitle>
-            <CardDescription>
-              From your race manager (mock or real)
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-80 pr-4">
-              {events.length === 0 ? (
-                <p className="text-base text-muted-foreground">
-                  No events yet. Run{" "}
-                  <code className="rounded bg-muted px-1 py-0.5 font-mono text-sm">
-                    npm run dev:mocks
-                  </code>{" "}
-                  and emit via the mock race manager HTTP API.
-                </p>
-              ) : (
-                <>
-                  <EventHero event={latestEvent} />
-                  {olderEvents.length > 0 && (
-                    <ul className="space-y-2">
-                      {olderEvents.map((event, i) => (
-                        <EventRow
-                          key={`${event.at}-${i + 1}`}
-                          event={event}
-                          dense
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Gate actions</CardTitle>
-            <CardDescription>Commands sent to ESPHome gates</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ScrollArea className="h-80 pr-4">
-              {actions.length === 0 ? (
-                <p className="text-base text-muted-foreground">
-                  Gate commands appear here when events trigger routines.
-                </p>
-              ) : (
-                <>
-                  <ActionHero action={latestAction} />
-                  {olderActions.length > 0 && (
-                    <ul className="space-y-2">
-                      {olderActions.map((action, i) => (
-                        <ActionRow
-                          key={`${action.at}-${i + 1}`}
-                          action={action}
-                          dense
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </>
-              )}
-            </ScrollArea>
-          </CardContent>
-        </Card>
-      </div>
+      <section aria-label="Events" className="space-y-3">
+        <h2 className="text-lg font-semibold tracking-tight">Events</h2>
+        {feed.length === 0 ? (
+          <p className="text-base text-muted-foreground">
+            Waiting for the race manager.
+          </p>
+        ) : (
+          <ul
+            data-testid="event-list"
+            className="max-h-96 space-y-2 overflow-y-auto pr-1"
+          >
+            {feed.map((event) => {
+              const color = timelinePilotColor(event);
+              const detail = timelineDetail(event);
+              const issue = eventIssueLabel(event, actions);
+              const warn =
+                issue === NO_ROUTINE_COMMAND || issue === NOTHING_SENT_COMMAND;
+              return (
+                <li
+                  key={event.at}
+                  className="rounded-md border border-border bg-muted/30 p-3"
+                >
+                  <div className="flex items-baseline justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                        {color ? (
+                          <span
+                            className="size-3 shrink-0 rounded-full border border-border"
+                            style={{ backgroundColor: rgbToHex(color) }}
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span
+                          data-testid="event-title"
+                          className={cn(
+                            "font-medium",
+                            eventStatusTextClass(event.type),
+                          )}
+                        >
+                          {timelineTitle(event)}
+                        </span>
+                        <span className="font-mono text-sm text-muted-foreground">
+                          {event.type}
+                        </span>
+                        {issue ? (
+                          <Badge variant={warn ? "outline" : "destructive"}>
+                            {issue}
+                          </Badge>
+                        ) : null}
+                      </div>
+                      {detail ? (
+                        <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                          {detail}
+                        </p>
+                      ) : null}
+                    </div>
+                    <time className="shrink-0 font-mono text-sm tabular-nums text-muted-foreground">
+                      {formatEventTime(event.at)}
+                    </time>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </div>
   );
 }

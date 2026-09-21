@@ -132,10 +132,32 @@ export type RaceEventEnvelope = {
   at: string;
 };
 
+/** Delay steps and routine outcomes log under this id. They are not a gate. */
+export const ROUTINE_LOG_GATE_ID = "routine";
+
+/** Emitted when a race event has no enabled routine. */
+export const NO_ROUTINE_COMMAND = "No routine";
+
+/** Emitted when a routine runs and never addresses a gate. */
+export const NOTHING_SENT_COMMAND = "Nothing sent";
+
+/** What a gate was told to show. Drives the dashboard strip without parsing labels. */
+export type GateLedSnapshot = {
+  mode: "off" | "solid" | "effect";
+  brightnessPercent?: number;
+  r?: number;
+  g?: number;
+  b?: number;
+  effectId?: string;
+};
+
 export type RaceActionEnvelope = {
   gateId: string;
   command: string;
   success: boolean;
   error?: string;
   at: string;
+  /** `at` of the race event that caused this command. Absent for manual overrides. */
+  eventAt?: string;
+  led?: GateLedSnapshot;
 };

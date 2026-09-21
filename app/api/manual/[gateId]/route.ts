@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import type { ChoreographyAction } from "@/lib/choreography/types";
 import { getGate, getGates } from "@/lib/config/store";
 import type { EsphomeCommand } from "@/lib/esphome";
-import { sendEsphomeCommand } from "@/lib/esphome";
 import { logger } from "@/lib/logger";
 import { getRaceBrain } from "@/lib/race-brain";
 
@@ -52,8 +51,9 @@ export async function POST(request: Request, { params }: Params) {
       return NextResponse.json({ error: "No enabled gates" }, { status: 404 });
     }
 
+    const { gateEngine } = getRaceBrain();
     const results = await Promise.all(
-      gates.map((gate) => sendEsphomeCommand(gate.host, body)),
+      gates.map((gate) => gateEngine.sendManualCommand(gate, body)),
     );
     const failed = results.filter((r) => !r.ok);
 
@@ -76,11 +76,15 @@ export async function POST(request: Request, { params }: Params) {
     return NextResponse.json({ error: "Gate not found" }, { status: 404 });
   }
 
-  const res = await sendEsphomeCommand(gate.host, body);
+  const { gateEngine } = getRaceBrain();
+  const result = await gateEngine.sendManualCommand(gate, body);
   logger.info(
     "manual",
-    `${gateId} ${res.ok ? "ok" : `HTTP ${res.status}`} host=${gate.host}`,
+    `${gateId} ${result.ok ? "ok" : `failed`} host=${gate.host}`,
     body,
   );
-  return NextResponse.json({ ok: res.ok, status: res.status });
+  return NextResponse.json({
+    ok: result.ok,
+    status: "status" in result ? result.status : undefined,
+  });
 }

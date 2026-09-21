@@ -121,6 +121,6 @@ export class RaceManagerListener {
     logger.info("race-manager", `event ${event.type}`, event);
 
     this.broadcaster.emitRaceEvent(envelope);
-    void this.gateEngine.dispatch(event);
+    void this.gateEngine.dispatch(event, envelope.at);
   }
 }

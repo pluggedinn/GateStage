@@ -64,9 +64,8 @@ test.describe("Gate automation", () => {
     expect(turnOn.length).toBeGreaterThan(0);
     expect(turnOn.some((c) => c.params.g === "255")).toBe(true);
 
-    await expect(page.getByTestId("last-event-type")).toHaveText("heat.go", {
+    await expect(page.getByTestId("event-list")).toContainText("heat.go", {
       timeout: 10_000,
     });
-    await expect(page.getByTestId("latest-event-type")).toHaveText("heat.go");
   });
 });

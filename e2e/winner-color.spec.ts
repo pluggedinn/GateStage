@@ -67,7 +67,7 @@ test.describe("Winner color", () => {
     });
 
     await emitNextEvent("heat.go");
-    await expect(page.getByTestId("last-event-type")).toHaveText("heat.go", {
+    await expect(page.getByTestId("event-list")).toContainText("heat.go", {
       timeout: 10_000,
     });
 
@@ -76,10 +76,9 @@ test.describe("Winner color", () => {
     await emitNextWire(pilotWire(1, "Alpha", "FF0000", 3));
     await emitNextWire(pilotWire(2, "Bravo", "0080FF", 3));
 
-    await expect(page.getByTestId("last-event-type")).toHaveText(
-      "pilot.crossing",
-      { timeout: 10_000 },
-    );
+    await expect(page.getByTestId("event-list")).toContainText("Alpha", {
+      timeout: 10_000,
+    });
 
     await emitNextEvent("heat.finished");
 
