@@ -15,7 +15,7 @@ import {
 const dev = process.env.NODE_ENV !== "production";
 const hostname = process.env.HOSTNAME ?? "0.0.0.0";
 const port = Number(process.env.PORT ?? 8080);
-/** App root for Next (standalone dir when packaged). */
+/** App root for Next. Override when the process cwd is not the repo. */
 const dir = process.env.GATESTAGE_APP_DIR
   ? path.resolve(process.env.GATESTAGE_APP_DIR)
   : process.cwd();

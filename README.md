@@ -5,15 +5,15 @@
 <h1 align="center">GateStage</h1>
 
 <p align="center">
-  <a href="#"><img alt="Platform" src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-blue?style=flat-square" /></a>
+  <a href="#"><img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D20-blue?style=flat-square" /></a>
   <a href="https://go-next.co/"><img alt="Next RD" src="https://img.shields.io/badge/Next-race%20director-111?style=flat-square" /></a>
   <a href="https://esphome.io/"><img alt="ESPHome" src="https://img.shields.io/badge/ESPHome-LED%20gates-2E7DFF?style=flat-square" /></a>
 </p>
 
 <h3 align="center">LED gate control for FPV whoop races.</h3>
 
-Your race director laptop is already running a race manager — heats, pilots, frequencies, the stream.
-But when the heat goes live, who's driving the start gate, finish arch, and LED cues on the course?
+Your race manager already owns the heat — pilots, frequencies, the start.
+When that heat goes live, something still has to drive the start gate, finish arch, and LED cues on the course.
 
 GateStage listens to race events from supported race managers and commands ESPHome gates over the race LAN — so lights go green when they should, without another app to babysit or a cloud hop in between.
 
@@ -21,9 +21,14 @@ GateStage listens to race events from supported race managers and commands ESPHo
 
 FPV whoop races need synchronized LED gates — start lights, finish arches, status cues — tied to what your race manager is doing in the heat.
 
-GateStage is a local server that runs beside your race manager on the race director laptop.
-It subscribes to race events, maps them to gate behaviors you've configured, and drives ESP32 + ESPHome hardware over HTTP on the LAN.
-A web UI serves configuration, manual control, and a live event console to the RD and crew tablets on the same WiFi.
+GateStage is a local server on the race LAN. Run it on the timer, the race-director machine, or any other host that can reach both sides of the link.
+It subscribes to race events, maps them to gate behaviors you've configured, and drives ESP32 + ESPHome hardware over HTTP.
+A web UI serves configuration, manual control, and a live event console to crew browsers that can open the server.
+
+Two things have to be true:
+
+- The host shares a **WiFi subnet** with the gates. Discovery is a UDP broadcast to `255.255.255.255`, and broadcasts stay on that subnet.
+- The host can open a **WebSocket** to the race manager (Next, or RotorHazard's Socket.io).
 
 This is not a lap timer — that's Nuclear Hazard / RotorHazard.
 This is not a replacement for your race manager.
@@ -41,7 +46,7 @@ Select your provider in **Settings**. Use **Detect** to probe the race LAN for N
 
 ## Features
 
-- **One brain on the RD laptop** — GateStage owns the race manager connection, event mapping, and ESPHome commands; browsers are thin clients.
+- **One server on the race LAN** — GateStage owns the race manager connection, event mapping, and ESPHome commands; browsers are thin clients.
 - **Event-driven gate control** — heat start, finish, and configurable routines from race events.
 - **Automatic gate discovery** — flashed gates broadcast a UDP beacon; GateStage remembers the fleet and pings last-known IPs. A miss marks a row offline; it does not delete it or move start.
 - **Crew-friendly** — binds to `0.0.0.0` so anyone on race WiFi can open settings, the live console, or manual override.
@@ -52,7 +57,21 @@ Select your provider in **Settings**. Use **Detect** to probe the race LAN for N
 
 **Requirements:** Node.js 20+, npm.
 
-No real Next app or ESP32 required — mock servers simulate both:
+Clone the repo and run the server on any machine that shares a WiFi subnet with the gates and can reach the race manager over WebSocket. The timer is a fine host. So is the race-director machine.
+
+```sh
+git clone https://github.com/pluggedinn/GateStage.git
+cd GateStage
+npm install
+npm run build
+npm start
+```
+
+Open [http://127.0.0.1:8080](http://127.0.0.1:8080) on that machine, or `http://<host>:8080` from a crew browser on the same WiFi. How you keep the process up — a shell, systemd, a container — is yours.
+
+### Develop without hardware
+
+Mock servers stand in for Next and the ESP32 gates:
 
 ```sh
 npm install
@@ -87,24 +106,23 @@ curl http://127.0.0.1:9085/state   # gate-finish
 ## How It Works
 
 ```
-  Race manager (e.g. Next)
-  (race director laptop)
-       │  WebSocket race events
+  Race manager (Next, RotorHazard, …)
+       │  WebSocket
        ▼
- ┌─────────────────────────────────┐
- │ GateStage server                │
- │ maps events → gate actions      │
- │ persists config (JSON)          │
- └──┬──────────────┬───────────────┘
-    │ HTTP REST  │ Socket.io
-    ▼            ▼
- ESPHome      Browser UIs
- gates        (RD + crew on race WiFi)
- (ESP32-C5)
+ ┌──────────────────────────────────────┐
+ │ GateStage                            │
+ │ timer, RD machine, or any host       │
+ │ on the same subnet as the gates      │
+ │ maps events → gate actions           │
+ │ persists config (JSON)               │
+ └──┬──────────────┬────────────────────┘
+    │ HTTP REST    │ Socket.io
+    ▼              ▼
+ ESPHome gates   Browser UIs
+ (same subnet)   (anyone who can reach :8080)
 ```
 
-GateStage runs on the same laptop as your race manager.
-The server connects over WebSocket (Next today), translates race events into ESPHome REST calls, and broadcasts live events to every browser tab on the race LAN.
+The server connects to the race manager, translates race events into ESPHome REST calls, and pushes live events to every browser tab that has the UI open.
 Gate discovery uses a UDP beacon on port **9420** (`{"v":1,"id":"gate-start","rssi":-62,"tC":47.5}` to `255.255.255.255`). Known gates stay in the list; health is unicast HTTP to the last-known IP. Firmware `mdns:` is for ESPHome OTA / `*.local` only.
 
 Full hardware and networking context lives in [AGENTS.md](./AGENTS.md#architecture).
@@ -115,7 +133,7 @@ Settings are stored in `data/config.json` (gitignored).
 Gates are remembered in that file. New flashed gates appear from UDP beacons; Scan Now broadcasts WHO and pings last-known hosts.
 Race-manager **Detect** (Settings) is a separate LAN port probe + fingerprint — not the gate UDP beacon.
 
-Operational logs append to `data/gatestage.log` (same directory as config; desktop app: OS user data dir). Restarts keep writing to the same file. Override with `GATESTAGE_LOG_PATH`. Open **Logs** in the UI to tail the file, or read it on disk after a race day. At ~10 MB the file rotates once to `gatestage.log.1`.
+Operational logs append to `data/gatestage.log` (same directory as config). Restarts keep writing to the same file. Override with `GATESTAGE_LOG_PATH`. Open **Logs** in the UI to tail the file, or read it on disk after a race day. At ~10 MB the file rotates once to `gatestage.log.1`.
 
 Trigger a scan anytime:
 
@@ -149,40 +167,24 @@ Export/import via `GET/POST /api/config`.
 | `npm run test` | Unit tests |
 | `npm run test:e2e` | Playwright E2E tests |
 | `npm run build` | Production Next build |
-| `npm run build:next` | Next standalone + bundled desktop server entry |
-| `npm run build:desktop` | Package installers for this OS (`dist/desktop/`) |
-| `npm run desktop` | Launch Electron UI (requires `build:next` first) |
 | `npm run start` | Production server (`tsx server.ts`) |
-| `npm run start:standalone` | Production server from `.next/standalone` |
-
-## Desktop releases
-
-GateStage also ships as installable **macOS / Windows / Linux** apps (Electron wrapping the same server).
-
-| Channel | How |
-|---------|-----|
-| **Nightly** | Every push to `main` → GitHub prerelease tag `nightly` |
-| **Stable** | Push a version tag (`git tag v0.2.0 && git push origin v0.2.0`) |
-
-See [docs/DESKTOP.md](./docs/DESKTOP.md).
 
 ## Documentation
 
 - [AGENTS.md](./AGENTS.md) — **start here for coding agents** (architecture, conventions, commands)
 - [docs/DESIGN.md](docs/DESIGN.md) — UI design system and semantic color tokens
 - [docs/ESPHOME.md](docs/ESPHOME.md) — gate firmware setup ([docs/examples/gate.yaml](docs/examples/gate.yaml), XIAO ESP32-C5 + WS2811)
-- [docs/DESKTOP.md](docs/DESKTOP.md) — Electron packaging and GitHub release pipelines
 
 ## Race environment
 
-GateStage runs on the **race director laptop** alongside your race manager (e.g. [Next](https://go-next.co/)). ESP32 gates join the **same 5 GHz race WiFi** as the laptop. Server binds to `0.0.0.0` so crew open `http://<rd-laptop-ip>:8080`. No login in v1 — trusted LAN.
+GateStage runs on any host that shares the gate subnet and can reach the race manager — the timer, the race-director machine, or another box on that WiFi. ESP32 gates join the **same 5 GHz race WiFi and subnet**. Server binds to `0.0.0.0` so crew open `http://<gatestage-host>:8080`. No login in v1 — trusted LAN.
 
 **Race day checklist**
 
 1. Race WiFi AP up (5 GHz; Channel 36 preferred — keeps WiFi away from analog VTX on Raceband)
-2. RD laptop on race WiFi; race manager running (Next + RotorHazard timer, or your chosen stack)
-3. GateStage running; crew URL shared
-4. All ESP32 gates online on race WiFi (DHCP reservations help)
+2. Race manager running and reachable over WebSocket (Next, RotorHazard, or your stack)
+3. GateStage on the same WiFi subnet as the gates; crew URL shared
+4. All ESP32 gates online on that subnet (DHCP reservations help)
 5. Internet optional — timing and gate control work offline on the LAN
 
 ## License
