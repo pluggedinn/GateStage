@@ -93,9 +93,10 @@ test.describe("Gates discovery", () => {
     await expect(page.getByTestId("gate-row-gate-2")).toBeVisible();
   });
 
-  test("live health shows last-seen and mock telemetry", async ({ page }) => {
+  test("live health shows status and mock telemetry", async ({ page }) => {
     await page.request.post("/api/gates/discover");
     await page.goto("/gates");
+    await expect(page.getByTestId("gate-last-seen-gate-start")).toHaveCount(0);
     await expect(page.getByTestId("gate-status-gate-start")).toContainText(
       /Online|Offline/,
     );

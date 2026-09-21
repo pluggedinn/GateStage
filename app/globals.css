@@ -209,6 +209,23 @@
   animation: led-scan-sweep 2s linear infinite;
 }
 
+/* Online-dot heartbeat when a gate checks in. */
+@keyframes gate-status-ping {
+  0% {
+    opacity: 1;
+  }
+  35% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.gate-status-ping {
+  animation: gate-status-ping 400ms ease-out;
+}
+
 /* Nav wordmark — logo cyan tube, glow stays on the glyphs. */
 @keyframes brand-wordmark-breathe {
   0%,
