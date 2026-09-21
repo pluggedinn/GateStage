@@ -64,7 +64,7 @@ Tailwind utilities: `text-status-ok`, `bg-status-warn`, `border-status-error`, e
 
 | Page | Density | Priority |
 |------|---------|----------|
-| **Dashboard** | Glanceable — status strip + latest-event hero | Live connection + latest event |
+| **Dashboard** | Event feed plus an issues list | Events as they fire, failures, gates that need a look |
 | **Gates / Mappings** | Denser tables | Pre-race configuration |
 | **Manual** | Large touch targets + live LED preview | Race-day override |
 
@@ -90,9 +90,9 @@ Tailwind utilities: `text-status-ok`, `bg-status-warn`, `border-status-error`, e
 | `components/nav.tsx` | Brand accent + active route + connections + theme toggle |
 | `hooks/use-race-socket.tsx` | Shared `RaceSocketProvider` (single socket) |
 | `app/layout.tsx` | `text-base` on body; theme class on `<html>` via `next-themes` |
-| `app/page.tsx` | Status strip, event semantics, action color swatches |
+| `app/page.tsx` | Event feed and issues (failures, no routine, gate health) |
 | `lib/event-status.ts` | Event type → status token mapping |
-| `components/dashboard/status-strip.tsx` | Dashboard race status (gates + last event) |
+| `lib/dashboard-glance.ts` | Event labels and the issues list |
 | `lib/broadcaster.ts` | Event/action buffer + replay on socket connect |
 | `components/led-strip-preview.tsx` | Live strip preview (solid / effect / off) |
 | `app/manual/page.tsx` | Preview card, 44px touch targets |

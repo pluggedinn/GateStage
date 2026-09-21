@@ -37,7 +37,7 @@ export async function POST(_request: Request, { params }: Params) {
   };
   broadcaster.emitRaceEvent(envelope);
 
-  const result = await gateEngine.runRoutine(eventType);
+  const result = await gateEngine.runRoutine(eventType, envelope.at);
   if (!result.ok) {
     return NextResponse.json({ error: result.error }, { status: 400 });
   }

@@ -26,6 +26,8 @@ type RaceSocketValue = {
   connection: RaceManagerConnectionState;
   connected: boolean;
   healthById: Record<string, GateHealth>;
+  /** True after the first gate health snapshot. Until then, offline is unknown. */
+  healthReady: boolean;
   configRevision: number;
 };
 
@@ -45,6 +47,7 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
   );
   const [connected, setConnected] = useState(false);
   const [healthById, setHealthById] = useState<Record<string, GateHealth>>({});
+  const [healthReady, setHealthReady] = useState(false);
   const [configRevision, setConfigRevision] = useState(0);
 
   useEffect(() => {
@@ -66,6 +69,7 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
     });
     socket.on("gate:health:snapshot", (snapshot: GateHealthSnapshot) => {
       setHealthById(snapshot);
+      setHealthReady(true);
     });
     socket.on("gate:health", (event: GateHealthEvent) => {
       const { gateId, ...health } = event;
@@ -91,6 +95,7 @@ export function RaceSocketProvider({ children }: { children: ReactNode }) {
         connection,
         connected,
         healthById,
+        healthReady,
         configRevision,
       }}
     >
