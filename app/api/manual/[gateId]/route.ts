@@ -1,15 +1,50 @@
 import { NextResponse } from "next/server";
+import type { ChoreographyAction } from "@/lib/choreography/types";
 import { getGate, getGates } from "@/lib/config/store";
 import type { EsphomeCommand } from "@/lib/esphome";
 import { sendEsphomeCommand } from "@/lib/esphome";
 import { logger } from "@/lib/logger";
+import { getRaceBrain } from "@/lib/race-brain";
 
 type Params = { params: Promise<{ gateId: string }> };
 
-/** Send an ESPHome command to one gate, or to every enabled gate when `gateId` is `all`. */
+/** Send an ESPHome command to one gate, every enabled gate, or a track choreography when `gateId` is `all`. */
 export async function POST(request: Request, { params }: Params) {
   const { gateId } = await params;
-  const body = (await request.json()) as EsphomeCommand;
+  const body = (await request.json()) as EsphomeCommand | ChoreographyAction;
+
+  if (body.kind === "choreography") {
+    if (gateId !== "all") {
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Choreography requires all gates",
+          status: 400,
+        },
+        { status: 400 },
+      );
+    }
+
+    const { gateEngine } = getRaceBrain();
+    const result = await gateEngine.runManualChoreography(body);
+    if ("error" in result) {
+      return NextResponse.json(
+        { ok: false, error: result.error, status: result.status },
+        { status: result.status },
+      );
+    }
+
+    logger.info(
+      "manual",
+      `all gates choreography ${body.choreographyId} failed=${result.failed}/${result.sent}`,
+    );
+
+    return NextResponse.json({
+      ok: result.ok,
+      sent: result.sent,
+      failed: result.failed,
+    });
+  }
 
   if (gateId === "all") {
     const gates = getGates().filter((g) => g.enabled);

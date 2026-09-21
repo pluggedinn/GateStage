@@ -1,6 +1,10 @@
 import { resolveBrightnessPercent } from "@/lib/brightness";
 import type { Broadcaster } from "@/lib/broadcaster";
-import { runChoreography } from "@/lib/choreography";
+import {
+  runChoreography,
+  validateChoreographyAction,
+} from "@/lib/choreography";
+import type { ChoreographyAction } from "@/lib/choreography/types";
 import { resolveActionColor } from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
 import {
@@ -100,6 +104,57 @@ export class GateEngine {
     );
     await this.executeSequence(sequence.steps, event);
     return { ok: true };
+  }
+
+  /**
+   * Run a track choreography from Manual without broadcasting a race event.
+   * The synthetic event only satisfies color resolution.
+   */
+  async runManualChoreography(
+    action: ChoreographyAction,
+  ): Promise<
+    | { ok: boolean; sent: number; failed: number }
+    | { ok: false; error: string; status: number }
+  > {
+    const error = validateChoreographyAction(action, "all");
+    if (error) return { ok: false, error, status: 400 };
+
+    const gates = getGates().filter((gate) => gate.enabled);
+    if (gates.length === 0) {
+      return { ok: false, error: "No enabled gates", status: 404 };
+    }
+
+    const event = createTestRaceEvent("heat.go");
+    let sent = 0;
+    let failed = 0;
+
+    logger.info(
+      "gate-engine",
+      `manual choreography ${action.choreographyId} gates=${gates.length}`,
+    );
+
+    await runChoreography(action, {
+      gates,
+      event,
+      sleep,
+      rttMsForGate: (gateId) => getLatestRttMs(gateId),
+      sendToGate: async (gate, command, commandLabel) => {
+        sent += 1;
+        const result = await this.sendCommandToGate(
+          gate,
+          command,
+          commandLabel,
+        );
+        if (!result.ok) failed += 1;
+        return result;
+      },
+    });
+
+    if (sent === 0) {
+      return { ok: false, error: "Choreography did not send", status: 400 };
+    }
+
+    return { ok: failed === 0, sent, failed };
   }
 
   private async executeSequence(steps: SequenceStep[], event: RaceEvent) {

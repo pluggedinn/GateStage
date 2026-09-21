@@ -1,7 +1,7 @@
 "use client";
 
+import { applyBrightnessToRgb, type Rgb, rgbToHex } from "@/lib/color";
 import { EFFECT_CATALOG } from "@/lib/effects";
-import { applyBrightnessToRgb, rgbToHex, type Rgb } from "@/lib/color";
 import { cn } from "@/lib/utils";
 
 export type LedPreviewMode = "effect" | "solid" | "off";
@@ -11,6 +11,8 @@ type LedStripPreviewProps = {
   brightnessPercent: number;
   rgb?: Rgb;
   effectId?: string;
+  /** Overrides the effect name in the preview caption. */
+  label?: string;
   gateId?: string;
   className?: string;
   "data-testid"?: string;
@@ -67,7 +69,10 @@ function effectBackgroundStyle(
 }
 
 function effectOpacity(effectId: string, brightnessPercent: number): number {
-  if (effectId === "addressable_color_wipe" || effectId === "addressable_comet") {
+  if (
+    effectId === "addressable_color_wipe" ||
+    effectId === "addressable_comet"
+  ) {
     return 1;
   }
   return Math.max(0.2, brightnessPercent / 100);
@@ -78,6 +83,7 @@ export function LedStripPreview({
   brightnessPercent,
   rgb = { r: 255, g: 0, b: 0 },
   effectId = "pulse",
+  label: labelOverride,
   gateId,
   className,
   "data-testid": testId,
@@ -88,9 +94,11 @@ export function LedStripPreview({
       ? "Off"
       : mode === "solid"
         ? `Solid ${rgbToHex(rgb)} @ ${brightnessPercent}%`
-        : effect
-          ? `${effect.name} @ ${brightnessPercent}%`
-          : "Effect";
+        : labelOverride
+          ? `${labelOverride} @ ${brightnessPercent}%`
+          : effect
+            ? `${effect.name} @ ${brightnessPercent}%`
+            : "Effect";
 
   const stripStyle =
     mode === "off"
