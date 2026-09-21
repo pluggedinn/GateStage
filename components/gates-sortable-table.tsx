@@ -18,7 +18,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -46,7 +46,6 @@ type GatesSortableTableProps = {
 type SortableGateRowProps = {
   gate: GateView;
   order: number;
-  now: number;
   onToggleStartGate: (gate: GateView) => void;
   onToggleEnabled: (gate: GateView) => void;
   onTestGate: (gateId: string) => void;
@@ -71,13 +70,18 @@ function tempClass(tempC: number | null): string {
 function SortableGateRow({
   gate,
   order,
-  now,
   onToggleStartGate,
   onToggleEnabled,
   onTestGate,
   testing,
   onForgetGate,
 }: SortableGateRowProps) {
+  const [trackedSeen, setTrackedSeen] = useState(gate.lastSeenAt);
+  const [pinging, setPinging] = useState(false);
+  if (gate.lastSeenAt !== trackedSeen) {
+    setTrackedSeen(gate.lastSeenAt);
+    setPinging(Boolean(gate.online && gate.lastSeenAt));
+  }
   const {
     attributes,
     listeners,
@@ -128,20 +132,16 @@ function SortableGateRow({
           data-testid={`gate-status-${gate.id}`}
         >
           <span
+            key={gate.lastSeenAt ?? "unseen"}
             className={cn(
               "size-2 shrink-0 rounded-full",
               gate.online ? "bg-status-ok" : "bg-status-muted",
+              gate.online && pinging && "gate-status-ping",
             )}
             aria-hidden
           />
           {gate.online ? "Online" : "Offline"}
         </span>
-      </TableCell>
-      <TableCell
-        className="font-mono text-xs tabular-nums"
-        data-testid={`gate-last-seen-${gate.id}`}
-      >
-        {formatLastSeen(gate.lastSeenAt, now)}
       </TableCell>
       <TableCell
         className={cn("font-mono text-xs tabular-nums", rssiClass(gate.rssi))}
@@ -157,7 +157,7 @@ function SortableGateRow({
         data-testid={`gate-rssi-min-${gate.id}`}
         title={
           gate.lastOfflineAt
-            ? `Last dropout ${formatLastSeen(gate.lastOfflineAt, now)}`
+            ? `Last dropout ${formatLastSeen(gate.lastOfflineAt)}`
             : undefined
         }
       >
@@ -215,18 +215,12 @@ export function GatesSortableTable({
   testingGateIds,
   onForgetGate,
 }: GatesSortableTableProps) {
-  const [now, setNow] = useState(() => Date.now());
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
   );
-
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -255,7 +249,6 @@ export function GatesSortableTable({
               <TableHead>ID</TableHead>
               <TableHead>Host</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead>Last seen</TableHead>
               <TableHead>WiFi</TableHead>
               <TableHead>Worst</TableHead>
               <TableHead>Drops</TableHead>
@@ -275,7 +268,6 @@ export function GatesSortableTable({
                   key={gate.id}
                   gate={gate}
                   order={index + 1}
-                  now={now}
                   onToggleStartGate={onToggleStartGate}
                   onToggleEnabled={onToggleEnabled}
                   onTestGate={onTestGate}
