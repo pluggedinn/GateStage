@@ -1,6 +1,6 @@
 # GateStage — Agent Guide
 
-**LED gate control for FPV whoop races.** Listens to race events from supported race managers (Next available today; FPV Trackside and RotorHazard planned) and drives ESPHome LED gates over the race LAN. Runs on the race director laptop; crew use browsers on the same WiFi.
+**LED gate control for FPV whoop races.** Listens to race events from supported race managers (Next available today; FPV Trackside and RotorHazard planned) and drives ESPHome LED gates over the race LAN. Runs on any host that shares a WiFi subnet with the gates (UDP broadcast) and can reach the race manager over WebSocket — the timer, the race-director machine, or another box. Crew use browsers that can open the server.
 
 Canonical entry point for coding agents. UI: `docs/DESIGN.md`. Gate firmware: `docs/ESPHOME.md`.
 
@@ -21,10 +21,10 @@ Test event: `curl -X POST http://127.0.0.1:9401/emit -H 'Content-Type: applicati
 | `npm run test` | Unit tests (discovery merge, beacon parse) |
 | `npm run test:e2e` | Playwright (starts mocks automatically) |
 | `npm run lint` | Biome check |
-| `npm run build:next` | Next standalone + bundled `gatestage-server.cjs` |
-| `npm run build:desktop` | Electron installers → `dist/desktop/` |
+| `npm run build` | Production Next build |
+| `npm start` | Production server (`tsx server.ts`) |
 
-More commands and ports: [README.md](./README.md). Desktop packaging: [docs/DESKTOP.md](./docs/DESKTOP.md).
+More commands and ports: [README.md](./README.md). Clone the repo and run it; there is no platform installer.
 
 ---
 
@@ -34,7 +34,7 @@ More commands and ports: [README.md](./README.md). Desktop packaging: [docs/DESK
 2. **Run via `server.ts`** — not plain `next dev` (no Socket.io / RaceBrain / race manager listener otherwise).
 3. **ESPHome from server only** — never call ESP32 from the browser (CORS). Use `lib/esphome.ts`.
 4. **Gates are discovered** — UDP beacons (`255.255.255.255:9420`), not manually created. No `POST /api/gates`. Forget with `DELETE /api/gates/:id`.
-5. **Bind `0.0.0.0`** — crew reach `http://<rd-laptop-ip>:8080`. No auth (trusted LAN).
+5. **Bind `0.0.0.0`** — crew reach `http://<host>:8080`. No auth (trusted LAN). The host must share a subnet with the gates (UDP broadcast) and reach the race manager over WebSocket.
 6. **UI status colors** — semantic tokens in `app/globals.css` only; see [docs/DESIGN.md](./docs/DESIGN.md).
 
 ---
@@ -137,10 +137,9 @@ Next has no heat-loaded / roster event. `heat.loaded` is still used by RotorHaza
 | E2E test | `e2e/`, `e2e/helpers/mocks.ts` |
 | Gate firmware | `docs/examples/gate.yaml`, [docs/ESPHOME.md](./docs/ESPHOME.md) |
 | Visual / UI polish | [docs/DESIGN.md](./docs/DESIGN.md), `.cursor/skills/web-design-engineer/SKILL.md` |
-| Desktop packaging / releases | [docs/DESKTOP.md](./docs/DESKTOP.md), `desktop/`, `electron-builder.yml`, `.github/workflows/release-*.yml` |
 
 ---
 
 ## Not used
 
-Vercel/serverless, Home Assistant, MQTT, client-side ESPHome, database (JSON file only).
+Vercel/serverless, Home Assistant, MQTT, client-side ESPHome, database (JSON file only), desktop installers.

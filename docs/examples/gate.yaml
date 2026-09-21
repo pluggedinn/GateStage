@@ -93,7 +93,7 @@ web_server:
   version: 3
   local: true
 
-# GateStage presence: broadcast id + RSSI + chip temp. Laptop listens on 9420.
+# GateStage presence: broadcast id + RSSI + chip temp. GateStage listens on 9420.
 udp:
   id: gatestage_beacon
   port: 9420

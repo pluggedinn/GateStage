@@ -198,7 +198,7 @@ esphome -s gate_id start run gate.yaml
 
 ### Verify with GateStage
 
-1. Start GateStage on a machine on the **same WiFi** as the gate
+1. Start GateStage on a machine on the **same WiFi subnet** as the gate (beacons are a UDP broadcast)
 2. Open **Gates** — a flashed gate should appear within a few seconds (UDP beacon), or run `POST /api/gates/discover`
 3. Mark **gate-start** as the start gate
 4. Use **Test** (rainbow) or **Manual** to confirm LEDs respond
