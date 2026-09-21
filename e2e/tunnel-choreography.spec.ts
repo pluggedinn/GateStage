@@ -141,6 +141,92 @@ test.describe("Tunnel choreography", () => {
     }
   });
 
+  test("manual all-gates tunnel staggers strobe start delays", async () => {
+    const orderedIds = [
+      "gate-start",
+      "gate-2",
+      "gate-3",
+      "gate-4",
+      "gate-5",
+      "gate-finish",
+    ];
+
+    const res = await fetch(`${API}/api/manual/all`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "choreography",
+        choreographyId: "tunnel",
+        params: {
+          colorSource: "fixed",
+          r: 0,
+          g: 255,
+          b: 0,
+          brightnessPercent: 5,
+          staggerMs: 80,
+          onMs: 80,
+        },
+      }),
+    });
+    expect(res.ok).toBeTruthy();
+    const body = (await res.json()) as { ok: boolean; sent: number };
+    expect(body.ok).toBe(true);
+    expect(body.sent).toBe(orderedIds.length);
+
+    await expect
+      .poll(async () => {
+        const states = await Promise.all(
+          orderedIds.map((id) => getEsphomeStateForGate(id)),
+        );
+        return states.every((state) =>
+          state.commands.some(
+            (command) =>
+              command.action === "turn_on" &&
+              command.params.effect === "Strobe",
+          ),
+        );
+      })
+      .toBe(true);
+
+    const delays: number[] = [];
+    for (const id of orderedIds) {
+      const state = await getEsphomeStateForGate(id);
+      const turnOn = state.commands.find(
+        (command) =>
+          command.action === "turn_on" && command.params.effect === "Strobe",
+      );
+      expect(turnOn).toBeTruthy();
+      expect(turnOn?.params.g).toBe("255");
+      const delay = strobeStartDelay(state);
+      expect(delay).not.toBeNull();
+      delays.push(delay ?? 0);
+    }
+
+    for (let i = 1; i < delays.length; i++) {
+      expect(delays[i]).toBeGreaterThan(delays[i - 1] ?? 0);
+    }
+  });
+
+  test("rejects a manual choreography sent to one gate", async () => {
+    const res = await fetch(`${API}/api/manual/gate-start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        kind: "choreography",
+        choreographyId: "tunnel",
+        params: {
+          colorSource: "fixed",
+          r: 255,
+          g: 0,
+          b: 0,
+          staggerMs: 80,
+          onMs: 80,
+        },
+      }),
+    });
+    expect(res.status).toBe(400);
+  });
+
   test("rejects choreography when target is not all gates", async () => {
     const stepRes = await fetch(`${API}/api/sequences/heat.arm_started/steps`, {
       method: "POST",
