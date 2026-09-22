@@ -135,9 +135,6 @@ export type RaceEventEnvelope = {
 /** Delay steps and routine outcomes log under this id. They are not a gate. */
 export const ROUTINE_LOG_GATE_ID = "routine";
 
-/** Emitted when a race event has no enabled routine. */
-export const NO_ROUTINE_COMMAND = "No routine";
-
 /** Emitted when a routine runs and never addresses a gate. */
 export const NOTHING_SENT_COMMAND = "Nothing sent";
 

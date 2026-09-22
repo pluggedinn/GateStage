@@ -7,7 +7,6 @@ import {
   timelineTitle,
 } from "./dashboard-glance";
 import {
-  NO_ROUTINE_COMMAND,
   NOTHING_SENT_COMMAND,
   type RaceActionEnvelope,
   type RaceEventEnvelope,
@@ -74,14 +73,14 @@ describe("event text", () => {
 });
 
 describe("issues", () => {
-  test("flags an event with no routine and ignores a healthy command", () => {
+  test("ignores a missing routine and a healthy command", () => {
     const go = heatEvent("heat.go", "2026-01-01T00:00:01.000Z");
     const actions = [
       action({
         gateId: "routine",
         at: "2026-01-01T00:00:01.100Z",
         eventAt: go.at,
-        command: NO_ROUTINE_COMMAND,
+        command: "No routine",
         success: false,
       }),
       action({
@@ -91,12 +90,8 @@ describe("issues", () => {
         success: true,
       }),
     ];
-    assert.equal(eventIssueLabel(go, actions), NO_ROUTINE_COMMAND);
-    const issues = dashboardIssues([go], actions, []);
-    assert.equal(issues.length, 1);
-    assert.equal(issues[0].tone, "warn");
-    assert.equal(issues[0].title, "Go · No routine");
-    assert.equal(issues[0].detail, "Heat 3");
+    assert.equal(eventIssueLabel(go, actions), null);
+    assert.deepEqual(dashboardIssues([go], actions, []), []);
   });
 
   test("keeps a failed command and a nothing-sent notice", () => {

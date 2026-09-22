@@ -1,10 +1,12 @@
 import {
-  NO_ROUTINE_COMMAND,
   NOTHING_SENT_COMMAND,
   type RaceActionEnvelope,
   type RaceEventEnvelope,
   ROUTINE_LOG_GATE_ID,
 } from "@/lib/types";
+
+/** Older sessions recorded this. The dashboard does not surface it. */
+const HIDDEN_ROUTINE_NOTICE = "No routine";
 
 /** Same error band as the Gates table: below this is a problem. */
 export const POOR_RSSI_DBM = -80;
@@ -83,8 +85,7 @@ function actionsForEvent(
 function isRoutineNotice(action: RaceActionEnvelope) {
   return (
     action.gateId === ROUTINE_LOG_GATE_ID &&
-    (action.command === NO_ROUTINE_COMMAND ||
-      action.command === NOTHING_SENT_COMMAND)
+    action.command === NOTHING_SENT_COMMAND
   );
 }
 
@@ -94,9 +95,6 @@ export function eventIssueLabel(
   actions: RaceActionEnvelope[],
 ): string | null {
   const related = actionsForEvent(event, actions);
-  if (related.some((action) => action.command === NO_ROUTINE_COMMAND)) {
-    return NO_ROUTINE_COMMAND;
-  }
   if (related.some((action) => action.command === NOTHING_SENT_COMMAND)) {
     return NOTHING_SENT_COMMAND;
   }
@@ -145,7 +143,7 @@ function gateIssues(gates: GateAttention[]): DashboardIssue[] {
   return issues;
 }
 
-/** Offline or unhealthy gates, failed commands, and events that lit nothing. */
+/** Offline or unhealthy gates, failed commands, and routines that sent nothing. */
 export function dashboardIssues(
   events: RaceEventEnvelope[],
   actions: RaceActionEnvelope[],
@@ -155,6 +153,7 @@ export function dashboardIssues(
   const commandIssues: DashboardIssue[] = [];
 
   for (const action of actions) {
+    if (action.command === HIDDEN_ROUTINE_NOTICE) continue;
     if (isRoutineNotice(action)) {
       const event = action.eventAt ? eventByAt.get(action.eventAt) : undefined;
       const title = event

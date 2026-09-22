@@ -90,7 +90,7 @@ Tailwind utilities: `text-status-ok`, `bg-status-warn`, `border-status-error`, e
 | `components/nav.tsx` | Brand accent + active route + connections + theme toggle |
 | `hooks/use-race-socket.tsx` | Shared `RaceSocketProvider` (single socket) |
 | `app/layout.tsx` | `text-base` on body; theme class on `<html>` via `next-themes` |
-| `app/page.tsx` | Event feed and issues (failures, no routine, gate health) |
+| `app/page.tsx` | Event feed and issues (failures, nothing sent, gate health) |
 | `lib/event-status.ts` | Event type → status token mapping |
 | `lib/dashboard-glance.ts` | Event labels and the issues list |
 | `lib/broadcaster.ts` | Event/action buffer + replay on socket connect |

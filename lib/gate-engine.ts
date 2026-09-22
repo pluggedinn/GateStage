@@ -23,7 +23,6 @@ import { createTestRaceEvent } from "@/lib/test-race-event";
 import {
   type GateLedSnapshot,
   type MappingAction,
-  NO_ROUTINE_COMMAND,
   NOTHING_SENT_COMMAND,
   type RaceActionEnvelope,
   type RaceEvent,
@@ -89,7 +88,6 @@ export class GateEngine {
         "gate-engine",
         `no routine for ${event.type} enabled=${sequence?.enabled ?? false} steps=${sequence?.steps.length ?? 0}`,
       );
-      this.emitRoutineNotice(NO_ROUTINE_COMMAND, eventAt);
       return;
     }
 
