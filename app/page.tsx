@@ -16,7 +16,7 @@ import {
   timelineTitle,
 } from "@/lib/dashboard-glance";
 import { eventStatusTextClass } from "@/lib/event-status";
-import { NO_ROUTINE_COMMAND, NOTHING_SENT_COMMAND } from "@/lib/types";
+import { NOTHING_SENT_COMMAND } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 function formatEventTime(at: string) {
@@ -131,8 +131,7 @@ export default function DashboardPage() {
               const color = timelinePilotColor(event);
               const detail = timelineDetail(event);
               const issue = eventIssueLabel(event, actions);
-              const warn =
-                issue === NO_ROUTINE_COMMAND || issue === NOTHING_SENT_COMMAND;
+              const warn = issue === NOTHING_SENT_COMMAND;
               return (
                 <li
                   key={event.at}
