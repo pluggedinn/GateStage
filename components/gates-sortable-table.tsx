@@ -179,12 +179,14 @@ function SortableGateRow({
         <Switch
           checked={gate.isStartGate}
           onCheckedChange={() => onToggleStartGate(gate)}
+          aria-label={`Start gate for ${gate.id}`}
         />
       </TableCell>
       <TableCell>
         <Switch
           checked={gate.enabled}
           onCheckedChange={() => onToggleEnabled(gate)}
+          aria-label={`Enabled ${gate.id}`}
         />
       </TableCell>
       <TableCell className="space-x-2 text-right">
