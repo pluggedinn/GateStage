@@ -71,8 +71,8 @@ export default function DashboardPage() {
   const feed = eventsNewestFirst(events);
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      <div className="space-y-3">
         <h1 className="text-xl font-semibold tracking-tight">Dashboard</h1>
         <p className="text-base text-muted-foreground">
           Race events, and anything that needs a look

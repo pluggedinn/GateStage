@@ -29,6 +29,8 @@
     "dev:mocks": "concurrently -k -n next,esphome,app -c blue,magenta,green \"npm run mock:next\" \"npm run mock:esphome\" \"ESPHOME_MOCK_FLEET=1 npm run dev\"",
     "test": "node scripts/run-unit-tests.mjs",
     "test:e2e": "playwright test",
+    "test:e2e:desktop": "playwright test --project=desktop",
+    "test:e2e:mobile": "playwright test --project=mobile",
     "lint": "biome check",
     "format": "biome format --write"
   },

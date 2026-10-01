@@ -237,8 +237,8 @@ export default function RoutinesPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight">Routines</h1>
         <p className="text-base text-muted-foreground">
           Ordered steps that run when a race event fires — gate actions and
@@ -246,20 +246,20 @@ export default function RoutinesPage() {
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="space-y-6">
         {RACE_EVENT_TYPES.map((event) => {
           const sequence = sequenceByEvent.get(event.id);
           const steps = sequence?.steps ?? [];
           return (
             <Card key={event.id}>
-              <CardHeader className="flex flex-row items-start justify-between gap-4">
-                <div className="space-y-1">
-                  <CardTitle className="font-mono text-base">
+              <CardHeader className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                <div className="min-w-0 space-y-1">
+                  <CardTitle className="font-mono text-base break-all">
                     {event.id}
                   </CardTitle>
                   <CardDescription>{event.description}</CardDescription>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-wrap items-center gap-2">
                   {sequence && (
                     <div className="flex items-center gap-2">
                       <LabelledSwitch
@@ -286,6 +286,7 @@ export default function RoutinesPage() {
                           ? "Running…"
                           : "Run routine"
                     }
+                    className="size-11 lg:size-7"
                     data-testid={`run-routine-${event.id}`}
                     onClick={() => void runRoutine(event.id)}
                   >
@@ -299,6 +300,7 @@ export default function RoutinesPage() {
                   <Button
                     size="sm"
                     variant="secondary"
+                    className="h-11 min-w-28 flex-1 lg:h-7 lg:flex-none"
                     onClick={() => setWizardEvent(event.id)}
                   >
                     Add step

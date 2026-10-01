@@ -138,9 +138,9 @@ export default function LogsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+        <div className="min-w-0 space-y-3">
           <h1 className="text-3xl font-semibold tracking-tight">Logs</h1>
           <p className="text-base text-muted-foreground">
             Append-only file that survives restarts. Last 256 KB of the current
@@ -167,7 +167,7 @@ export default function LogsPage() {
       </div>
 
       <Card>
-        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <CardHeader className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <CardTitle>Event log</CardTitle>
             <CardDescription>
@@ -178,7 +178,7 @@ export default function LogsPage() {
                   : `${lines.length} line${lines.length === 1 ? "" : "s"}`}
             </CardDescription>
           </div>
-          <div className="flex flex-wrap gap-1">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {FILTERS.map((item) => {
               const active = filter === item.id;
               return (
@@ -187,6 +187,7 @@ export default function LogsPage() {
                   size="sm"
                   variant={active ? "default" : "outline"}
                   aria-pressed={active}
+                  className="min-h-11 sm:min-h-0"
                   onClick={() => setFilter(item.id)}
                 >
                   {item.label}

@@ -218,9 +218,9 @@ export default function GatesPage() {
   const onlineCount = rows.filter((g) => g.online).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+        <div className="space-y-3">
           <h1 className="text-3xl font-semibold tracking-tight">Gates</h1>
           <p className="text-base text-muted-foreground">
             The fleet is remembered. Flashed gates announce themselves over UDP;
@@ -228,7 +228,11 @@ export default function GatesPage() {
             marks a row offline — it does not remove it or move start.
           </p>
         </div>
-        <Button onClick={() => void scanNetwork()} disabled={scanning}>
+        <Button
+          className="min-h-11 w-full sm:w-auto"
+          onClick={() => void scanNetwork()}
+          disabled={scanning}
+        >
           {scanning ? "Scanning…" : "Scan now"}
         </Button>
       </div>

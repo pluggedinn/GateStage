@@ -232,8 +232,8 @@ export default function ManualPage() {
 
   return (
     <>
-      <div className="space-y-4 pb-24">
-        <div>
+      <div className="space-y-8 pb-24">
+        <div className="space-y-3">
           <h1 className="text-3xl font-semibold tracking-tight">
             Manual control
           </h1>
