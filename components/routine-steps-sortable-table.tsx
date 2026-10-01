@@ -79,7 +79,7 @@ function SortableStepRow({
       <TableCell className="w-10 px-2">
         <button
           type="button"
-          className="flex size-8 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing"
+          className="flex size-11 cursor-grab items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground active:cursor-grabbing lg:size-8"
           aria-label={`Drag to reorder step ${order}`}
           {...attributes}
           {...listeners}
@@ -90,12 +90,13 @@ function SortableStepRow({
       <TableCell className="w-12 px-2 text-center font-mono tabular-nums text-muted-foreground">
         {order}
       </TableCell>
-      <TableCell>{renderStepCell(step)}</TableCell>
-      <TableCell className="space-x-2 text-right">
+      <TableCell className="whitespace-normal">{renderStepCell(step)}</TableCell>
+      <TableCell className="space-x-2 text-right whitespace-nowrap">
         {step.kind === "delay" && <Badge variant="secondary">wait</Badge>}
         <Button
           size="sm"
           variant="destructive"
+          className="min-h-11 lg:min-h-0"
           onClick={() => onDelete(step.id)}
         >
           Delete

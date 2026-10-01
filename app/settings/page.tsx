@@ -242,8 +242,8 @@ export default function SettingsPage() {
   );
 
   return (
-    <div className="space-y-6">
-      <div>
+    <div className="space-y-8">
+      <div className="space-y-3">
         <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
         <p className="text-base text-muted-foreground">
           Global defaults for GateStage and your race manager connection
@@ -382,10 +382,11 @@ export default function SettingsPage() {
           )}
 
           {providerIsAvailable && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button
                 type="button"
                 variant="outline"
+                className="min-h-11 w-full sm:min-h-0 sm:w-auto"
                 disabled={detecting || loading || savingConnection}
                 onClick={() => void detectRaceManager()}
                 data-testid="detect-race-manager"
@@ -394,6 +395,7 @@ export default function SettingsPage() {
               </Button>
               <Button
                 type="button"
+                className="min-h-11 w-full sm:min-h-0 sm:w-auto"
                 disabled={
                   savingConnection ||
                   detecting ||

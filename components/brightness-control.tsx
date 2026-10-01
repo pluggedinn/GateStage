@@ -49,7 +49,7 @@ export function BrightnessControl({
           type="button"
           variant="outline"
           size={large ? "lg" : "sm"}
-          className={large ? "min-h-11" : undefined}
+          className={large ? "min-h-11" : "min-h-11 lg:min-h-0"}
           disabled={savingDefault}
           onClick={onSaveDefault}
         >

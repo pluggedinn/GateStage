@@ -131,6 +131,12 @@
   --brand-cyan: #79f2fd;
 }
 
+/* Horizontal inset that clears the iPhone safe area without doubling page padding. */
+.shell-x {
+  padding-left: max(1.5rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.5rem, env(safe-area-inset-right, 0px));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

@@ -172,18 +172,6 @@ export function EffectPicker({
     </div>
   );
 
-  const effectBlurb =
-    extra || effect ? (
-      <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
-        {effect ? (
-          <EffectPreview effectId={effect.id} name={effect.name} />
-        ) : null}
-        <p className="text-xs leading-relaxed text-muted-foreground">
-          {extra?.description ?? effect?.description}
-        </p>
-      </div>
-    ) : null;
-
   const colorPanel =
     effect?.supportsColor &&
     value.r !== undefined &&
@@ -271,9 +259,6 @@ export function EffectPicker({
           {colorPanel}
           {paramsPanel}
         </div>
-        {effectBlurb ? (
-          <div className="md:col-span-2">{effectBlurb}</div>
-        ) : null}
       </div>
     );
   }
@@ -281,7 +266,6 @@ export function EffectPicker({
   return (
     <div className={cn("space-y-4", className)}>
       {effectSelect}
-      {effectBlurb}
       {colorPanel}
       {paramsPanel}
     </div>

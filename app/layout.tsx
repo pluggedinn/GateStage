@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Arimo } from "next/font/google";
 import { Nav } from "@/components/nav";
 import { Providers } from "@/components/providers";
@@ -12,6 +12,12 @@ const arimo = Arimo({
 export const metadata: Metadata = {
   title: "GateStage",
   description: "LED gate control for FPV whoop races",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
@@ -28,7 +34,7 @@ export default function RootLayout({
       <body className="flex min-h-full flex-col bg-background text-base">
         <Providers>
           <Nav />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+          <main className="shell-x mx-auto w-full max-w-6xl flex-1 pt-8 pb-[max(2rem,env(safe-area-inset-bottom))] lg:pt-6 lg:pb-6">
             {children}
           </main>
         </Providers>
