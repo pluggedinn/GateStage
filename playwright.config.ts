@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -11,6 +11,16 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:8080",
     trace: "on-first-retry",
   },
+  projects: [
+    {
+      name: "desktop",
+      use: { ...devices["Desktop Chrome"] },
+    },
+    {
+      name: "mobile",
+      use: { ...devices["iPhone 14 Pro"] },
+    },
+  ],
   webServer: [
     {
       command: "npm run mock:next",
