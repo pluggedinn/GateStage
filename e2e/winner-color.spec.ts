@@ -42,6 +42,7 @@ test.describe("Winner color", () => {
     await fetch(`${API}/api/gates/discover`, { method: "POST" });
     await resetRoutineSteps("heat.go");
     await resetRoutineSteps("heat.finished");
+    await resetRoutineSteps("pilot.crossing");
   });
 
   test("heat.finished uses the first 3-lap pilot color", async ({ page }) => {

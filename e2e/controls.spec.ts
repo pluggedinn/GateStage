@@ -96,7 +96,8 @@ test.describe("Buttons and dropdowns", () => {
       await page.getByRole("option", { name: /RotorHazard/ }).click();
       await expect(page.getByLabel("Server URL")).toBeVisible();
       await expect(page.getByText(/RotorHazard lap timer/)).toBeVisible();
-      await expect(page.getByRole("button", { name: "Save" })).toBeEnabled();
+      const save = page.getByRole("button", { name: "Save", exact: true });
+      await expect(save).toBeEnabled();
 
       await provider.click();
       await expect(
@@ -109,7 +110,7 @@ test.describe("Buttons and dropdowns", () => {
       const url = page.getByLabel("WebSocket URL");
       await expect(url).toBeVisible();
       await url.fill("ws://127.0.0.1:9400");
-      await page.getByRole("button", { name: "Save" }).click();
+      await save.click();
       await expect(
         page.getByText("Race manager connection saved"),
       ).toBeVisible();
