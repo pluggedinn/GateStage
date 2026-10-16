@@ -27,6 +27,8 @@ esphome:
   name: gate
   friendly_name: Gate ${gate_id}
   name_add_mac_suffix: true
+  includes:
+    - gatestage_fade.h
   on_boot:
     # Match runtime LED limit to the flashed strip buffer size.
     - priority: -200
@@ -191,6 +193,10 @@ globals:
     type: bool
     restore_value: false
     initial_value: "false"
+  - id: g_fade_ms
+    type: int
+    restore_value: false
+    initial_value: "0"
 
 number:
   - platform: template
@@ -363,6 +369,17 @@ number:
       - globals.set:
           id: g_comet_max_brightness
           value: !lambda "return (int) x;"
+  - platform: template
+    name: "FX Fade"
+    optimistic: true
+    min_value: 0
+    max_value: 10000
+    step: 50
+    initial_value: 0
+    set_action:
+      - globals.set:
+          id: g_fade_ms
+          value: !lambda "return (int) x;"
 
 switch:
   - platform: template
@@ -487,6 +504,7 @@ light:
     default_transition_length: 0s
     restore_mode: ALWAYS_ON
     on_turn_off:
+      # Runs once the transition reaches off, so a fade-out finishes first.
       - lambda: |-
           auto *out = static_cast<esphome::light::AddressableLight *>(id(gate_led).get_output());
           if (out == nullptr) return;
@@ -505,11 +523,9 @@ light:
             const int size = it.size();
             const int count = active < size ? active : size;
             if (count <= 0) return;
+            gs::fade_begin(it, initial_run);
             if (initial_run) {
               phase_origin = millis();
-              it.range(0, count - 1) = esphome::Color(0, 0, 0);
-              if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
-              return;
             }
             const uint32_t now = millis();
             const uint32_t ramp_ms = (uint32_t) id(g_pulse_transition_ms);
@@ -535,6 +551,7 @@ light:
             const esphome::Color lit = current_color * scale;
             it.range(0, count - 1) = lit;
             if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+            gs::fade_apply(it, (uint32_t) id(g_fade_ms));
       - addressable_lambda:
           name: Strobe
           update_interval: 16ms
@@ -543,6 +560,7 @@ light:
             const int size = it.size();
             const int count = active < size ? active : size;
             if (count <= 0) return;
+            gs::fade_begin(it, initial_run);
             // Origin is stamped when FX Strobe Start Delay is set (millis + delay),
             // not on initial_run — re-arming a running Strobe must re-phase.
             const uint32_t period_ms = (uint32_t) id(g_strobe_period_ms);
@@ -554,6 +572,7 @@ light:
             const esphome::Color c = on ? current_color : esphome::Color(0, 0, 0);
             it.range(0, count - 1) = c;
             if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+            gs::fade_apply(it, (uint32_t) id(g_fade_ms));
       - addressable_lambda:
           name: Rainbow
           update_interval: 16ms
@@ -563,6 +582,7 @@ light:
             const int active = id(g_active_leds);
             const int size = it.size();
             if (size == 0) return;
+            gs::fade_begin(it, initial_run);
             const int count = active < size ? active : size;
             const int safe_width = width < 1 ? 1 : width;
             esphome::light::ESPHSVColor hsv;
@@ -578,6 +598,7 @@ light:
             if (count < size) {
               it.range(count, size - 1) = esphome::Color(0, 0, 0);
             }
+            gs::fade_apply(it, (uint32_t) id(g_fade_ms));
       - addressable_lambda:
           name: Color Wipe
           update_interval: 16ms
@@ -589,41 +610,35 @@ light:
             const int size = it.size();
             const int count = active < size ? active : size;
             if (count <= 0) return;
+            gs::fade_begin(it, initial_run);
             if (initial_run) {
               last_add = 0;
               wiping_off = 0;
               leds_added = 0;
-              it.range(0, count - 1) = esphome::Color(0, 0, 0);
-              if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
-              return;
             }
             const uint32_t now = millis();
             const uint32_t interval_ms = (uint32_t) id(g_wipe_interval_ms);
             const uint32_t safe_interval = interval_ms < 10 ? 10 : interval_ms;
-            if (now - last_add < safe_interval) return;
-            last_add = now;
+            // Repaint from leds_added so a fade never reads already-blended pixels.
+            if (!initial_run && now - last_add >= safe_interval) {
+              last_add = now;
+              if (leds_added >= count) {
+                leds_added = 1;
+                wiping_off = wiping_off ? 0 : 1;
+              } else {
+                leds_added++;
+              }
+            }
             const bool reverse = id(g_wipe_reverse);
-            if (reverse) {
-              for (int i = 0; i < count - 1; i++) {
-                it[i] = it[i + 1].get();
-              }
-            } else {
-              for (int i = count - 1; i > 0; i--) {
-                it[i] = it[i - 1].get();
-              }
-            }
-            // Fill with the selected color, then wipe to off — matches the UI preview (fxWipe).
-            const esphome::Color esp_color = wiping_off ? esphome::Color(0, 0, 0) : current_color;
-            if (reverse) {
-              it[count - 1] = esp_color;
-            } else {
-              it[0] = esp_color;
-            }
-            if (++leds_added >= count) {
-              leds_added = 0;
-              wiping_off = wiping_off ? 0 : 1;
+            const esphome::Color fill = wiping_off ? esphome::Color(0, 0, 0) : current_color;
+            const esphome::Color rest = wiping_off ? current_color : esphome::Color(0, 0, 0);
+            const int filled = leds_added < count ? leds_added : count;
+            for (int i = 0; i < count; i++) {
+              const bool is_fill = reverse ? i >= count - filled : i < filled;
+              it[i] = is_fill ? fill : rest;
             }
             if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+            gs::fade_apply(it, (uint32_t) id(g_fade_ms));
       - addressable_lambda:
           name: Comet
           update_interval: 16ms
@@ -650,6 +665,7 @@ light:
             const float saved_b = id(gate_led).current_values.get_brightness();
             id(gate_led).current_values.set_brightness(1.0f);
             if (out != nullptr) out->update_state(id(gate_led));
+            gs::fade_begin(it, initial_run);
             float base_level = slider;
             if (base_level < 0.0f) base_level = 0.0f;
             if (base_level > 1.0f) base_level = 1.0f;
@@ -676,5 +692,6 @@ light:
               it[i] = current_color * (uint8_t) (level * 255.0f);
             }
             if (count < size) it.range(count, size - 1) = esphome::Color(0, 0, 0);
+            gs::fade_apply(it, (uint32_t) id(g_fade_ms));
             id(gate_led).current_values.set_brightness(saved_b);
             if (out != nullptr) out->update_state(id(gate_led));

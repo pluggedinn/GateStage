@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { BrightnessControl } from "@/components/brightness-control";
 import { ColorPicker } from "@/components/color-picker";
 import { EffectPicker, type EffectSelection } from "@/components/effect-picker";
+import { FadeControl } from "@/components/fade-control";
 import { GateTargetPicker } from "@/components/gate-target-picker";
 import {
   type LedPreviewMode,
@@ -86,6 +87,7 @@ export default function ManualPage() {
   const [brightnessPercent, setBrightnessPercent] = useState(
     DEFAULT_BRIGHTNESS_PERCENT,
   );
+  const [fadeMs, setFadeMs] = useState(0);
   const [mode, setMode] = useState<LedPreviewMode>("effect");
   const [effect, setEffect] = useState<EffectSelection>(
     defaultEffectSelection("addressable_rainbow"),
@@ -191,6 +193,7 @@ export default function ManualPage() {
       effectId: effect.effectId,
       params: effect.params,
       brightnessPercent,
+      fadeMs,
       ...(effect.r !== undefined &&
         effect.g !== undefined &&
         effect.b !== undefined && {
@@ -323,15 +326,18 @@ export default function ManualPage() {
                 }
                 className="sm:col-span-2 lg:col-span-1"
               >
-                <Button
-                  size="lg"
-                  variant="destructive"
-                  className="min-h-11 w-full"
-                  disabled={!hasGateSelection}
-                  onClick={() => void send({ kind: "off" })}
-                >
-                  {isAllGates ? "Turn off gates" : "Turn off gate"}
-                </Button>
+                <div className="flex flex-col gap-4">
+                  <FadeControl value={fadeMs} onChange={setFadeMs} />
+                  <Button
+                    size="lg"
+                    variant="destructive"
+                    className="min-h-11 w-full"
+                    disabled={!hasGateSelection}
+                    onClick={() => void send({ kind: "off", fadeMs })}
+                  >
+                    {isAllGates ? "Turn off gates" : "Turn off gate"}
+                  </Button>
+                </div>
               </StepCell>
             ) : (
               <StepCell
@@ -340,10 +346,13 @@ export default function ManualPage() {
                 description="Brightness for this command"
                 className="sm:col-span-2 lg:col-span-1"
               >
-                <BrightnessControl
-                  value={brightnessPercent}
-                  onChange={setBrightnessPercent}
-                />
+                <div className="space-y-4">
+                  <BrightnessControl
+                    value={brightnessPercent}
+                    onChange={setBrightnessPercent}
+                  />
+                  <FadeControl value={fadeMs} onChange={setFadeMs} />
+                </div>
               </StepCell>
             )}
 
@@ -465,7 +474,12 @@ export default function ManualPage() {
                     className="min-h-11 w-full shrink-0 sm:w-auto sm:min-w-36"
                     disabled={!hasGateSelection}
                     onClick={() =>
-                      void send({ kind: "rgb", ...rgb, brightnessPercent })
+                      void send({
+                        kind: "rgb",
+                        ...rgb,
+                        brightnessPercent,
+                        fadeMs,
+                      })
                     }
                   >
                     Apply color

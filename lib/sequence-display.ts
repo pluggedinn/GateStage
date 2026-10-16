@@ -9,6 +9,15 @@ function brightnessSuffix(percent?: number) {
   return ` @ ${percent}%`;
 }
 
+export function fadeSuffix(fadeMs?: number): string {
+  if (!fadeMs || fadeMs <= 0) return "";
+  const seconds = fadeMs / 1000;
+  const label = Number.isInteger(seconds)
+    ? String(seconds)
+    : String(Number(seconds.toFixed(2)));
+  return ` · fade ${label}s`;
+}
+
 export function describeStepTarget(
   target: MappingTarget,
   targetGateId: string | null,
@@ -31,14 +40,16 @@ export function describeGateAction(action: MappingAction): string {
     return (
       describeEffectAction(effectId, action.params) +
       colorLabel +
-      brightnessSuffix(action.brightnessPercent)
+      brightnessSuffix(action.brightnessPercent) +
+      fadeSuffix(action.fadeMs)
     );
   }
   if (action.kind === "solid") {
     if (isDynamicColorSource(action.colorSource)) {
       return (
         describeColorSource(action.colorSource) +
-        brightnessSuffix(action.brightnessPercent)
+        brightnessSuffix(action.brightnessPercent) +
+        fadeSuffix(action.fadeMs)
       );
     }
     if (
@@ -48,18 +59,19 @@ export function describeGateAction(action: MappingAction): string {
     ) {
       return (
         rgbToHex({ r: action.r, g: action.g, b: action.b }) +
-        brightnessSuffix(action.brightnessPercent)
+        brightnessSuffix(action.brightnessPercent) +
+        fadeSuffix(action.fadeMs)
       );
     }
-    return `Solid color${brightnessSuffix(action.brightnessPercent)}`;
+    return `Solid color${brightnessSuffix(action.brightnessPercent)}${fadeSuffix(action.fadeMs)}`;
   }
   if (action.kind === "pilot_color") {
-    return `Pilot color${brightnessSuffix(action.brightnessPercent)}`;
+    return `Pilot color${brightnessSuffix(action.brightnessPercent)}${fadeSuffix(action.fadeMs)}`;
   }
   if (action.kind === "choreography") {
     return describeChoreographyAction(action);
   }
-  return "Off";
+  return `Off${fadeSuffix(action.fadeMs)}`;
 }
 
 export function describeDelayStep(ms: number): string {

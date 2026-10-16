@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { BrightnessControl } from "@/components/brightness-control";
 import { ColorSourcePicker } from "@/components/color-source-picker";
 import { EffectPicker, type EffectSelection } from "@/components/effect-picker";
+import { FadeControl } from "@/components/fade-control";
 import { GateTargetPicker } from "@/components/gate-target-picker";
 import { Button } from "@/components/ui/button";
 import {
@@ -92,6 +93,7 @@ export function RoutineStepWizard({
   const [brightnessPercent, setBrightnessPercent] = useState(
     defaultBrightnessPercent,
   );
+  const [fadeMs, setFadeMs] = useState(0);
   const [tunnelStaggerMs, setTunnelStaggerMs] = useState(
     String(DEFAULT_STAGGER_MS),
   );
@@ -132,6 +134,7 @@ export function RoutineStepWizard({
     setRgb({ r: 0, g: 255, b: 0 });
     setColorSource("fixed");
     setBrightnessPercent(defaultBrightnessPercent);
+    setFadeMs(0);
     setTunnelStaggerMs(String(DEFAULT_STAGGER_MS));
     setTunnelOnMs(String(DEFAULT_STAGGER_MS));
     setSubmitting(false);
@@ -156,6 +159,10 @@ export function RoutineStepWizard({
     if (colorSource === "winner" && showWinnerColorOption) return "winner";
     if (colorSource === "pilot" && showPilotColorOption) return "pilot";
     return "fixed";
+  }
+
+  function fadeField(): { fadeMs: number } | Record<string, never> {
+    return fadeMs > 0 ? { fadeMs } : {};
   }
 
   function buildAction(): MappingAction {
@@ -192,6 +199,7 @@ export function RoutineStepWizard({
         effectId: effect.effectId,
         params: effect.params,
         brightnessPercent,
+        ...fadeField(),
       };
       if (effectDef?.supportsColor) {
         const source = persistableColorSource();
@@ -215,16 +223,22 @@ export function RoutineStepWizard({
     if (actionKind === "solid") {
       const source = persistableColorSource();
       if (isDynamicColorSource(source)) {
-        return { kind: "solid", colorSource: source, brightnessPercent };
+        return {
+          kind: "solid",
+          colorSource: source,
+          brightnessPercent,
+          ...fadeField(),
+        };
       }
       return {
         kind: "solid",
         colorSource: "fixed",
         ...rgb,
         brightnessPercent,
+        ...fadeField(),
       };
     }
-    return { kind: "off" };
+    return { kind: "off", ...fadeField() };
   }
 
   function buildStep(): Omit<SequenceStep, "id"> {
@@ -519,6 +533,10 @@ export function RoutineStepWizard({
                 onChange={setBrightnessPercent}
               />
             )}
+
+          {wizardStep === 3 && stepKind === "action" && !trackEffectId && (
+            <FadeControl value={fadeMs} onChange={setFadeMs} />
+          )}
         </div>
 
         <DialogFooter>
