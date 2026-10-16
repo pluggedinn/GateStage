@@ -186,6 +186,97 @@ describe("sendEsphomeCommand retries", () => {
   });
 });
 
+describe("sendEsphomeCommand fade", () => {
+  test("rgb fadeMs 500 sends transition=0.5", async () => {
+    let url = "";
+    globalThis.fetch = (async (input) => {
+      url = String(input);
+      return okResponse();
+    }) as typeof fetch;
+
+    await sendEsphomeCommand("10.0.0.2:80", {
+      kind: "rgb",
+      r: 255,
+      g: 0,
+      b: 0,
+      brightnessPercent: 50,
+      fadeMs: 500,
+    });
+    assert.match(url, /effect=None/);
+    assert.match(url, /transition=0\.5/);
+  });
+
+  test("off with a fade sends transition on turn_off", async () => {
+    let url = "";
+    globalThis.fetch = (async (input) => {
+      url = String(input);
+      return okResponse();
+    }) as typeof fetch;
+
+    await sendEsphomeCommand("10.0.0.2:80", { kind: "off", fadeMs: 1000 });
+    assert.match(url, /turn_off/);
+    assert.match(url, /transition=1(?:&|$)/);
+  });
+
+  test("effect writes FX Fade before turn_on", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      urls.push(String(input));
+      return okResponse();
+    }) as typeof fetch;
+
+    await sendEsphomeCommand("10.0.0.2:80", {
+      kind: "effect",
+      effectId: "addressable_rainbow",
+      fadeMs: 250,
+      brightnessPercent: 5,
+    });
+
+    const fadeIndex = urls.findIndex(
+      (url) => url.includes("FX%20Fade") && url.includes("value=250"),
+    );
+    const turnOnIndex = urls.findIndex((url) => url.includes("turn_on"));
+    assert.ok(fadeIndex >= 0);
+    assert.ok(turnOnIndex > fadeIndex);
+    assert.match(urls[turnOnIndex] ?? "", /transition=0/);
+    assert.match(urls[turnOnIndex] ?? "", /effect=Rainbow/);
+  });
+
+  test("missing fade writes FX Fade 0", async () => {
+    const urls: string[] = [];
+    globalThis.fetch = (async (input) => {
+      urls.push(String(input));
+      return okResponse();
+    }) as typeof fetch;
+
+    await sendEsphomeCommand("10.0.0.2:80", {
+      kind: "effect",
+      effectId: "addressable_rainbow",
+      brightnessPercent: 5,
+    });
+
+    assert.ok(
+      urls.some((url) => url.includes("FX%20Fade") && url.includes("value=0")),
+    );
+  });
+
+  test("FX Fade 404 still turns the effect on", async () => {
+    globalThis.fetch = (async (input) => {
+      const url = String(input);
+      if (url.includes("FX%20Fade")) return new Response(null, { status: 404 });
+      return okResponse();
+    }) as typeof fetch;
+
+    const res = await sendEsphomeCommand("10.0.0.2:80", {
+      kind: "effect",
+      effectId: "addressable_rainbow",
+      fadeMs: 500,
+      brightnessPercent: 5,
+    });
+    assert.equal(res.ok, true);
+  });
+});
+
 describe("parseLightStateJson", () => {
   test("reads on, effect, brightness, and nested RGB", () => {
     const snapshot = parseLightStateJson({

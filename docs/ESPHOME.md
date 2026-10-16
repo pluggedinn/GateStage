@@ -121,7 +121,10 @@ GateStage and the sample gate firmware share the same effect catalog in **`lib/e
 When GateStage runs an effect it:
 
 1. Sets runtime parameters via ESPHome **`number`** REST entities (`FX Rainbow Speed`, etc.) when supported
-2. Calls `POST /light/Gate%20LEDs/turn_on?effect=<name>`
+2. Sets **`FX Fade`** to the step's `fadeMs` (or `0` for a cut)
+3. Calls `POST /light/Gate%20LEDs/turn_on?effect=<name>&transition=0`
+
+Solid colors and off use ESPHome's own `transition` (seconds) instead of `FX Fade`. A step's optional `fadeMs` is that duration. Effects ignore the light `transition` parameter, so each lambda calls `gs::fade_begin` / `gs::fade_apply` from `docs/examples/gatestage_fade.h`: the first frame copies the strip, and later frames blend toward the effect. `on_turn_off` runs after that transition reaches off, then clears the strip.
 
 **Runtime-tunable** (REST number/switch entities or ESPHome web UI):
 
@@ -133,6 +136,7 @@ When GateStage runs an effect it:
 | FX Strobe Period / On Time / Start Delay | Strobe |
 | FX Color Wipe Interval / Reverse | Color Wipe |
 | FX Comet Width / Count / Interval / Max Brightness / Reverse | Comet |
+| FX Fade | Crossfade into any effect (ms). `0` cuts |
 
 Strobe defaults to a 400ms cycle with 200ms on (same look as the old hardcoded flash). Period, on-time, and start delay are runtime-tunable. Color Wipe fills the active range with the selected color, then wipes to off.
 
@@ -163,11 +167,12 @@ POST http://192.168.4.21/number/FX%20Pulse%20Transition/set?value=800
 POST http://192.168.4.21/switch/FX%20Color%20Wipe%20Reverse/turn_on
 POST http://192.168.4.21/number/FX%20Comet%20Width/set?value=8
 POST http://192.168.4.21/number/FX%20Comet%20Count/set?value=3
-POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=None
-POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Rainbow
+POST http://192.168.4.21/number/FX%20Fade/set?value=500
+POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=None&transition=0.5
+POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Rainbow&transition=0
 POST http://192.168.4.21/light/Gate%20LEDs/turn_on?effect=Comet&color_mode=rgb&r=0&g=255&b=0&brightness=200
-POST http://192.168.4.21/light/Gate%20LEDs/turn_on?color_mode=rgb&r=255&g=0&b=0&brightness=200
-POST http://192.168.4.21/light/Gate%20LEDs/turn_off
+POST http://192.168.4.21/light/Gate%20LEDs/turn_on?color_mode=rgb&r=255&g=0&b=0&brightness=200&transition=0.5
+POST http://192.168.4.21/light/Gate%20LEDs/turn_off?transition=0.5
 ```
 
 ### Stopping an effect (ESPHome web UI)

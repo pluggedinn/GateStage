@@ -46,6 +46,7 @@ export function createEsphomeMockServer(options: {
     "FX Strobe Period": 400,
     "FX Strobe On Time": 200,
     "FX Strobe Start Delay": 0,
+    "FX Fade": 0,
   };
   const DEFAULT_LIGHT = {
     state: "ON",

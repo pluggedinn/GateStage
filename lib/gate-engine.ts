@@ -18,7 +18,7 @@ import { getLatestRttMs } from "@/lib/gate-presence";
 import { ingestRaceEvent, resolvePilotColor } from "@/lib/heat-state";
 import { logger } from "@/lib/logger";
 import type { RaceEventType } from "@/lib/race-events";
-import { describeDelayStep } from "@/lib/sequence-display";
+import { describeDelayStep, fadeSuffix } from "@/lib/sequence-display";
 import { createTestRaceEvent } from "@/lib/test-race-event";
 import {
   type GateLedSnapshot,
@@ -358,6 +358,7 @@ export class GateEngine {
             action,
             getDefaultBrightnessPercent(),
           ),
+          fadeMs: action.fadeMs,
           ...(rgb && {
             r: rgb.r,
             g: rgb.g,
@@ -377,10 +378,11 @@ export class GateEngine {
             action,
             getDefaultBrightnessPercent(),
           ),
+          fadeMs: action.fadeMs,
         };
       }
       case "off":
-        return { kind: "off" };
+        return { kind: "off", fadeMs: action.fadeMs };
       case "pilot_color": {
         const color = resolvePilotColor(event);
         if (!color) return null;
@@ -393,6 +395,7 @@ export class GateEngine {
             action,
             getDefaultBrightnessPercent(),
           ),
+          fadeMs: action.fadeMs,
         };
       }
       case "choreography":
@@ -403,11 +406,12 @@ export class GateEngine {
   }
 
   private describeCommand(command: EsphomeCommand): string {
-    if (command.kind === "off") return "turn_off";
+    const fade = fadeSuffix(command.fadeMs);
+    if (command.kind === "off") return `turn_off${fade}`;
     if (command.kind === "effect") {
       const label = describeEffectAction(command.effectId, command.params);
-      return `${label} @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%`;
+      return `${label} @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%${fade}`;
     }
-    return `rgb(${command.r},${command.g},${command.b}) @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%`;
+    return `rgb(${command.r},${command.g},${command.b}) @ ${command.brightnessPercent ?? getDefaultBrightnessPercent()}%${fade}`;
   }
 }

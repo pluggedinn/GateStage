@@ -20,6 +20,8 @@ export type EsphomeCommand =
       r?: number;
       g?: number;
       b?: number;
+      /** Crossfade into the effect. The gate blends; `turn_on` stays `transition=0`. */
+      fadeMs?: number;
     }
   | {
       kind: "rgb";
@@ -27,8 +29,14 @@ export type EsphomeCommand =
       g: number;
       b: number;
       brightnessPercent?: number;
+      /** ESPHome light `transition`, in milliseconds. */
+      fadeMs?: number;
     }
-  | { kind: "off" };
+  | { kind: "off"; fadeMs?: number };
+
+/** Runtime number the effect lambdas read for a crossfade. Missing on older firmware. */
+const FX_FADE_ENTITY = "FX Fade";
+const MAX_FADE_MS = 10_000;
 
 /** Identify-flash duration. Override with `GATESTAGE_GATE_TEST_DURATION_MS`. */
 export const GATE_TEST_DURATION_MS = 4_000;
@@ -52,6 +60,22 @@ const gateTestsInFlight = new Map<string, Promise<{ ok: boolean }>>();
 function resolveEsphomeBrightness(brightnessPercent?: number): number {
   const percent = brightnessPercent ?? getDefaultBrightnessPercent();
   return percentToEsphome(percent);
+}
+
+function clampFadeMs(fadeMs?: number): number {
+  if (fadeMs === undefined || !Number.isFinite(fadeMs)) return 0;
+  return Math.max(0, Math.min(MAX_FADE_MS, Math.round(fadeMs)));
+}
+
+/** ESPHome's light `transition` query param is seconds. */
+function fadeTransitionSeconds(fadeMs?: number): string {
+  return String(clampFadeMs(fadeMs) / 1000);
+}
+
+/** Older firmware has no FX Fade entity (404). Effects still run; they just cut. */
+async function writeFadeMs(host: string, fadeMs?: number): Promise<void> {
+  const url = `${hostBase(host)}/number/${entityPath(FX_FADE_ENTITY)}/set?value=${clampFadeMs(fadeMs)}`;
+  await esphomeFetch(url, { method: "POST" });
 }
 
 function entityPath(entity: string) {
@@ -205,7 +229,7 @@ export async function sendEsphomeCommand(
   const entitySeg = entityPath(DEFAULT_LIGHT_ENTITY);
 
   if (command.kind === "off") {
-    const url = `${base}/light/${entitySeg}/turn_off`;
+    const url = `${base}/light/${entitySeg}/turn_off?transition=${fadeTransitionSeconds(command.fadeMs)}`;
     return esphomeFetch(url, {
       method: "POST",
       headers: { "Content-Length": "0" },
@@ -220,6 +244,7 @@ export async function sendEsphomeCommand(
 
     const params = mergeEffectParams(command.effectId, command.params);
     await writeEffectParams(host, command.effectId, params);
+    await writeFadeMs(host, command.fadeMs);
 
     const q = new URLSearchParams({
       effect: effect.name,
@@ -247,7 +272,7 @@ export async function sendEsphomeCommand(
     g: String(command.g),
     b: String(command.b),
     brightness: String(resolveEsphomeBrightness(command.brightnessPercent)),
-    transition: "0",
+    transition: fadeTransitionSeconds(command.fadeMs),
   });
   const url = `${base}/light/${entitySeg}/turn_on?${q}`;
   return esphomeFetch(url, {

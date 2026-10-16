@@ -63,6 +63,9 @@ export type HeatInfo = z.infer<typeof heatInfoSchema>;
 
 export const mappingTargetSchema = z.enum(["all", "start_gate", "gate_id"]);
 
+/** Crossfade into this step. Omitted or 0 is an instant cut. */
+const fadeMsSchema = z.number().int().min(0).max(10_000).optional();
+
 export const mappingActionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("effect"),
@@ -75,10 +78,12 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
     r: z.number().int().min(0).max(255).optional(),
     g: z.number().int().min(0).max(255).optional(),
     b: z.number().int().min(0).max(255).optional(),
+    fadeMs: fadeMsSchema,
   }),
   z.object({
     kind: z.literal("pilot_color"),
     brightnessPercent: z.number().int().min(1).max(100).optional(),
+    fadeMs: fadeMsSchema,
   }),
   z.object({
     kind: z.literal("solid"),
@@ -89,8 +94,9 @@ export const mappingActionSchema = z.discriminatedUnion("kind", [
     /** @deprecated use brightnessPercent */
     brightness: z.number().int().optional(),
     brightnessPercent: z.number().int().min(1).max(100).optional(),
+    fadeMs: fadeMsSchema,
   }),
-  z.object({ kind: z.literal("off") }),
+  z.object({ kind: z.literal("off"), fadeMs: fadeMsSchema }),
   z.object({
     kind: z.literal("choreography"),
     choreographyId: z.string().min(1),
