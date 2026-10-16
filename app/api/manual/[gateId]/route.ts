@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import type { ChoreographyAction } from "@/lib/choreography/types";
 import { getGate, getGates } from "@/lib/config/store";
 import type { EsphomeCommand } from "@/lib/esphome";
+import { ALL_EXCEPT_START_TARGET, gatesExceptStart } from "@/lib/gate-targets";
 import { logger } from "@/lib/logger";
 import { getRaceBrain } from "@/lib/race-brain";
 
 type Params = { params: Promise<{ gateId: string }> };
 
-/** Send an ESPHome command to one gate, every enabled gate, or a track choreography when `gateId` is `all`. */
+/** Send an ESPHome command to one gate, a gate group, or a track choreography when `gateId` is `all`. */
 export async function POST(request: Request, { params }: Params) {
   const { gateId } = await params;
   const body = (await request.json()) as EsphomeCommand | ChoreographyAction;
@@ -45,10 +46,21 @@ export async function POST(request: Request, { params }: Params) {
     });
   }
 
-  if (gateId === "all") {
-    const gates = getGates().filter((g) => g.enabled);
+  if (gateId === "all" || gateId === ALL_EXCEPT_START_TARGET) {
+    const gates =
+      gateId === ALL_EXCEPT_START_TARGET
+        ? gatesExceptStart(getGates())
+        : getGates().filter((g) => g.enabled);
     if (gates.length === 0) {
-      return NextResponse.json({ error: "No enabled gates" }, { status: 404 });
+      return NextResponse.json(
+        {
+          error:
+            gateId === ALL_EXCEPT_START_TARGET
+              ? "No enabled gates besides the start gate"
+              : "No enabled gates",
+        },
+        { status: 404 },
+      );
     }
 
     const { gateEngine } = getRaceBrain();
@@ -57,9 +69,11 @@ export async function POST(request: Request, { params }: Params) {
     );
     const failed = results.filter((r) => !r.ok);
 
+    const group =
+      gateId === ALL_EXCEPT_START_TARGET ? "all except start" : "all gates";
     logger.info(
       "manual",
-      `all gates command failed=${failed.length}/${results.length}`,
+      `${group} command failed=${failed.length}/${results.length}`,
       body,
     );
 

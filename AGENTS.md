@@ -70,7 +70,7 @@ Path alias: `@/*` → project root. Server logic in `lib/`, UI in `app/` + `comp
 - **Gates:** `{ id, host, isStartGate, enabled, sortOrder }` — from UDP beacons / env extras. Health (`online`, last-seen, RSSI, temp) is runtime-only. Start gate is sticky; only Forget removes a row.
 - **Sequences** (UI: Routines): event type → ordered steps (`action` or `delay`)
 - **Actions:** `effect` | `solid` | `off` | `pilot_color` | `choreography`. Optional `fadeMs` (0–10000) on effect, solid, off, and pilot color. Omitted or `0` is an instant cut.
-- **Targets:** `all` | `start_gate` | `gate_id`
+- **Targets:** `all` | `all_except_start` | `start_gate` | `gate_id`
 - **Settings:** `raceManagerProvider` (`next` | `trackside` | `rotorhazard`), `nextWsUrl` (Next WebSocket), `rotorHazardUrl` (RotorHazard Socket.io), `defaultBrightnessPercent`
 
 - Default brightness: **5%** (`defaultBrightnessPercent`)

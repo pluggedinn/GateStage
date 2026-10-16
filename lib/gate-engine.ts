@@ -331,6 +331,9 @@ export class GateEngine {
     enabledGates: Gate[],
   ) {
     if (target === "all") return enabledGates;
+    if (target === "all_except_start") {
+      return enabledGates.filter((gate) => !gate.isStartGate);
+    }
     if (target === "start_gate") {
       const start = enabledGates.find((g) => g.isStartGate);
       return start ? [start] : [];
