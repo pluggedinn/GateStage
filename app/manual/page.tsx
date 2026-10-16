@@ -38,6 +38,11 @@ import {
 } from "@/lib/choreography";
 import type { Gate } from "@/lib/config/schema";
 import { defaultEffectSelection } from "@/lib/effects";
+import {
+  ALL_EXCEPT_START_LABEL,
+  ALL_EXCEPT_START_TARGET,
+  gatesExceptStart,
+} from "@/lib/gate-targets";
 import { cn } from "@/lib/utils";
 
 const CHOREOGRAPHY_ACTION_KINDS = getChoreographyWizardOptions();
@@ -100,6 +105,8 @@ export default function ManualPage() {
   const [tunnelOnMs, setTunnelOnMs] = useState(String(DEFAULT_STAGGER_MS));
 
   const isAllGates = selectedGateId === "all";
+  const isAllExceptStart = selectedGateId === ALL_EXCEPT_START_TARGET;
+  const isGroupTarget = isAllGates || isAllExceptStart;
   const hasGateSelection = Boolean(selectedGateId);
   const enabledGateCount = Math.max(
     gates.filter((gate) => gate.enabled).length,
@@ -219,14 +226,16 @@ export default function ManualPage() {
     };
     if (data.ok) {
       toast.success("Command sent", {
-        description: isAllGates
-          ? `All gates (${data.sent ?? gates.length})`
-          : `Gate ${selectedGateId}`,
+        description: isAllExceptStart
+          ? `${ALL_EXCEPT_START_LABEL} (${data.sent ?? gatesExceptStart(gates).length})`
+          : isAllGates
+            ? `All gates (${data.sent ?? gates.length})`
+            : `Gate ${selectedGateId}`,
       });
     } else {
       toast.error("Command failed", {
         description:
-          isAllGates && data.failed
+          isGroupTarget && data.failed
             ? `${data.failed} of ${data.sent} gates failed`
             : `HTTP ${data.status ?? "error"}`,
       });
@@ -278,6 +287,12 @@ export default function ManualPage() {
                     title: "Send to all enabled gates",
                     disabled: gates.length === 0,
                   },
+                  {
+                    value: ALL_EXCEPT_START_TARGET,
+                    label: ALL_EXCEPT_START_LABEL,
+                    title: "Send to every enabled gate except the start gate",
+                    disabled: gatesExceptStart(gates).length === 0,
+                  },
                 ]}
               />
             </StepCell>
@@ -320,9 +335,11 @@ export default function ManualPage() {
                 step={3}
                 title="Turn off"
                 description={
-                  isAllGates
-                    ? "Send off to all enabled gates"
-                    : "Send off to the selected gate"
+                  isAllExceptStart
+                    ? "Send off to every enabled gate except the start gate"
+                    : isAllGates
+                      ? "Send off to all enabled gates"
+                      : "Send off to the selected gate"
                 }
                 className="sm:col-span-2 lg:col-span-1"
               >
@@ -335,7 +352,7 @@ export default function ManualPage() {
                     disabled={!hasGateSelection}
                     onClick={() => void send({ kind: "off", fadeMs })}
                   >
-                    {isAllGates ? "Turn off gates" : "Turn off gate"}
+                    {isGroupTarget ? "Turn off gates" : "Turn off gate"}
                   </Button>
                 </div>
               </StepCell>
@@ -513,7 +530,13 @@ export default function ManualPage() {
             }
             effectId={tunnelSelected ? "strobe" : effect.effectId}
             label={tunnelSelected ? "Tunnel" : undefined}
-            gateId={isAllGates ? "All gates" : selectedGateId || undefined}
+            gateId={
+              isAllExceptStart
+                ? ALL_EXCEPT_START_LABEL
+                : isAllGates
+                  ? "All gates"
+                  : selectedGateId || undefined
+            }
             data-testid="led-strip-preview"
           />
         </div>

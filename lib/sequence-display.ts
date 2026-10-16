@@ -2,6 +2,7 @@ import { describeChoreographyAction } from "@/lib/choreography";
 import { rgbToHex } from "@/lib/color";
 import { describeColorSource, isDynamicColorSource } from "@/lib/color-source";
 import { describeEffectAction } from "@/lib/effects";
+import { ALL_EXCEPT_START_LABEL } from "@/lib/gate-targets";
 import type { MappingAction, MappingTarget, SequenceStep } from "@/lib/types";
 
 function brightnessSuffix(percent?: number) {
@@ -24,6 +25,7 @@ export function describeStepTarget(
 ): string {
   if (target === "gate_id" && targetGateId) return targetGateId;
   if (target === "start_gate") return "Start gate";
+  if (target === "all_except_start") return ALL_EXCEPT_START_LABEL;
   return "All gates";
 }
 

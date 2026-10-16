@@ -61,7 +61,12 @@ export type RaceEvent = z.infer<typeof raceEventSchema>;
 export type Pilot = z.infer<typeof pilotSchema>;
 export type HeatInfo = z.infer<typeof heatInfoSchema>;
 
-export const mappingTargetSchema = z.enum(["all", "start_gate", "gate_id"]);
+export const mappingTargetSchema = z.enum([
+  "all",
+  "all_except_start",
+  "start_gate",
+  "gate_id",
+]);
 
 /** Crossfade into this step. Omitted or 0 is an instant cut. */
 const fadeMsSchema = z.number().int().min(0).max(10_000).optional();

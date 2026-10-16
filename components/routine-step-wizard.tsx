@@ -32,8 +32,13 @@ import {
 } from "@/lib/color-source";
 import type { Gate } from "@/lib/config/schema";
 import { defaultEffectSelection, EFFECT_BY_ID } from "@/lib/effects";
+import {
+  ALL_EXCEPT_START_LABEL,
+  ALL_EXCEPT_START_TARGET,
+  gatesExceptStart,
+} from "@/lib/gate-targets";
 import { getRaceEventDef, type RaceEventType } from "@/lib/race-events";
-import type { MappingAction, SequenceStep } from "@/lib/types";
+import type { MappingAction, MappingTarget, SequenceStep } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 const ACTION_KINDS = [
@@ -257,7 +262,7 @@ export function RoutineStepWizard({
 
     return {
       kind: "action",
-      target: actualTarget as "all" | "start_gate" | "gate_id",
+      target: actualTarget as MappingTarget,
       targetGateId,
       action: buildAction(),
     } as Omit<SequenceStep, "id">;
@@ -400,6 +405,11 @@ export function RoutineStepWizard({
                 getGateValue={(gate) => `gate:${gate.id}`}
                 extraOptions={[
                   { value: "all", label: "All gates" },
+                  {
+                    value: ALL_EXCEPT_START_TARGET,
+                    label: ALL_EXCEPT_START_LABEL,
+                    disabled: gatesExceptStart(gates).length === 0,
+                  },
                   { value: "start_gate", label: "Start gate" },
                 ]}
                 ariaLabel="Which gates should respond"
