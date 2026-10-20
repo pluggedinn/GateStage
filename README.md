@@ -6,8 +6,6 @@
 
 <p align="center">
   <a href="#"><img alt="Node.js" src="https://img.shields.io/badge/node-%3E%3D20-blue?style=flat-square" /></a>
-  <a href="https://go-next.co/"><img alt="Next RD" src="https://img.shields.io/badge/Next-race%20director-111?style=flat-square" /></a>
-  <a href="https://esphome.io/"><img alt="ESPHome" src="https://img.shields.io/badge/ESPHome-LED%20gates-2E7DFF?style=flat-square" /></a>
 </p>
 
 <h3 align="center">LED gate control for FPV whoop races.</h3>
