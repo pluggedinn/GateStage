@@ -10,9 +10,6 @@
 
 <h3 align="center">LED gate control for FPV whoop races.</h3>
 
-Your race manager already owns the heat — pilots, frequencies, the start.
-When that heat goes live, something still has to drive the start gate, finish arch, and LED cues on the course.
-
 GateStage listens to race events from supported race managers and commands ESPHome gates over the race LAN — so lights go green when they should, without another app to babysit or a cloud hop in between.
 
 ## What it is
