@@ -224,6 +224,43 @@ Native API actions (lower latency than REST) can be added later. GateStage v1 us
 - **Data line level** — many WS2811 12 V modules accept 3.3 V data; use a level shifter if your strip is flaky
 - **Inrush** — size PSU for full strip brightness; brownouts on the strip PSU do not need to reset the ESP if logic is powered separately
 
+### Next setup — level shifter wiring
+
+The diagram below matches the field controller wiring: a 2S–6S LiPo through XT60 into a 12 V buck that feeds the WS2811 strip and a second buck to 5 V for the Seeed XIAO ESP32-C5; GPIO data passes through a 4-channel 3.3 V→5 V level shifter before the strip data input. A separate 12 V outlet taps the same 12 V line for auxiliary loads and is not tied to the ESP.
+
+```mermaid
+flowchart LR
+  LiPo["2S-6S LiPo Battery<br/>(7.4V–25.2V)"]
+  XT60["XT60 Connector<br/>V+ Main Power<br/>Ground GND"]
+  Buck12V_Green["Green Y1483 Super Mini 487<br/>Step down to 12V"]
+  Line12V["12V Line"]
+  Buck5V_Black["Black 487<br/>Step down to 5V"]
+  XIAO["Seeed Studio XIAO ESP32-C5"]
+  Shifter["4-Ch Level Shifter Module<br/>3.3V to 5V Logic"]
+  LEDStrip["12V LED Strip<br/>3-Pin Connector"]
+  Outlet12V["12V Power Outlet"]
+
+  LiPo --> XT60
+  XT60 -->|V+| Buck12V_Green
+  XT60 -->|Ground GND| Buck12V_Green
+  Buck12V_Green --> Line12V
+  Buck12V_Green -->|Ground GND| Line12V
+
+  Line12V -->|12V Power| LEDStrip
+  Line12V -->|Ground GND| LEDStrip
+  Line12V --> Buck5V_Black
+  Line12V --> Outlet12V
+
+  Buck5V_Black -->|5V → 5V Pin| XIAO
+  Buck5V_Black -->|GND → GND Pin| XIAO
+
+  XIAO -->|3.3V → LV Pin| Shifter
+  XIAO -->|GND → GND Pin| Shifter
+  XIAO -->|GPIO 3.3V Data Out → LV| Shifter
+
+  Shifter -->|HV 5V Boosted Data → Data In| LEDStrip
+```
+
 ---
 
 ## Gate inventory (fill in per venue)
